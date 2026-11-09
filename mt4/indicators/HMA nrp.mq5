@@ -519,7 +519,7 @@ int OnInit()
    SetIndexBuffer(1, HmaColorBuffer, INDICATOR_COLOR_INDEX);
    SetIndexBuffer(2, ArrowUpBuffer,  INDICATOR_DATA);
    SetIndexBuffer(3, ArrowDnBuffer,  INDICATOR_DATA);
-   SetIndexBuffer(4, TrendBuffer,    INDICATOR_CALCULATIONS);
+   SetIndexBuffer(4, TrendBuffer,    INDICATOR_DATA);
    SetIndexBuffer(5, TemBuffer,      INDICATOR_CALCULATIONS);
 
    //--- Empty values
