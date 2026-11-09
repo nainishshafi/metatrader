@@ -286,15 +286,12 @@ bool GetHMAData(double &trend, double &price)
    if(g_hHMA == INVALID_HANDLE)
       return(false);
 
-   // Check if indicator calculations are ready
-   int calc_bars = BarsCalculated(g_hHMA);
-   if(calc_bars < 2)
-      return(false);
-
    double price_arr[];
    ArraySetAsSeries(price_arr, true);
 
    // Buffer 0 is HmaBuffer (HMA price line) - Always reliable & accessible
+   // Calling CopyBuffer triggers MT5 background calculation engine
+   ResetLastError();
    int copied_price = CopyBuffer(g_hHMA, 0, 0, 2, price_arr);
    if(copied_price < 2 || price_arr[0] == EMPTY_VALUE || price_arr[0] <= 0.0)
       return(false);
