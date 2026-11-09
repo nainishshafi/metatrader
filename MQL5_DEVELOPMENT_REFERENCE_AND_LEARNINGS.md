@@ -143,3 +143,52 @@ This document captures the technical lessons, architectural pitfalls, debugging 
 * **`InpMagicManual` (9999):** Used by manual GUI panel buttons (`BUY`, `SELL`, `Close Half`, `Update SL`).
 * **`InpMagicAuto` (1234):** Used exclusively by the automated trend-following engine.
 * This separation prevents manual user trades from interfering with auto-reversal management or `InpAutoTradeOnce` state logic.
+
+---
+
+## 6. Critical Rules for Future Agents: What NOT To Do
+
+> [!CAUTION]
+> The following list documents patterns that have directly caused crashes, deadlocks, UI unresponsiveness, or silent bugs in this codebase. **Do NOT re-introduce them under any circumstances.**
+
+### 1. DO NOT Add `input group` to Indicators Called via `iCustom()`
+* **Why:** MQL5 treats `input group "..."` declarations as active `TYPE_STRING` parameter slots.
+* **Result:** It causes silent index shifting of all subsequent parameters passed into `iCustom()`, causing timeframe mismatches, corrupted indicator handles, and calculation failures.
+* **Rule:** Use regular single-line comments (`//--- Group Name`) instead of `input group`.
+
+### 2. DO NOT Call `CopyBuffer()` Without a `BarsCalculated()` Guard
+* **Why:** Calling `CopyBuffer()` on an indicator handle before calculation completes triggers an internal MT5 synchronous blocking wait of **~46.7 seconds**.
+* **Result:** Freezes the EA main thread, chart GUI, and button click handlers during startup and chart reloads.
+* **Rule:** Always guard with `if(BarsCalculated(handle) < 2) return(false);`.
+
+### 3. DO NOT Use `ArraySize()` or `ArrayResize()` on Managed Indicator Buffers
+* **Why:** Buffers assigned with `SetIndexBuffer()` are managed by MT5. In secondary calculation threads (such as `iCustom` instances), `ArraySize(buffer)` returns `0`.
+* **Result:** Loops like `for(int r = 0; r < ArraySize(dst); r++)` will immediately exit without calculating anything, leaving the indicator completely blank.
+* **Rule:** Bound loops by `total` (`rates_total`). Only use `ArrayResize()` on local/scratch dynamic arrays, never on indicator buffers.
+
+### 4. DO NOT Create Buttons Before Background Panels
+* **Why:** In MetaTrader 5, graphical objects are visually stacked and rendered in the **chronological order of creation**.
+* **Result:** If background panels (`OBJ_RECTANGLE_LABEL`) or labels are created after buttons, they will visually cover or capture mouse events over the buttons, rendering them unclickable.
+* **Rule:** Always create the background panel **first**, labels **second**, and interactive buttons **last** (`OBJPROP_ZORDER = 100`).
+
+### 5. DO NOT Redraw Chart Objects on Every Tick in `OnTick()`
+* **Why:** High-volume symbols like XAU/USD fire dozens of ticks per second. Calling `ObjectSetString()`, `ObjectSetInteger()`, or `ChartRedraw(0)` on every tick floods the Windows GDI font engine and MT5 chart event queue.
+* **Result:** Drops mouse clicks (`CHARTEVENT_OBJECT_CLICK`) and spikes CPU usage.
+* **Rule:** Update dashboard text on a 1-second timer (`OnTimer()`) and immediately upon button clicks. Use cached delta checks (`SetLabelIfChanged`) so unchanged text is never re-set.
+
+### 6. DO NOT Use Modal `Alert()` Inside Event Handlers or Trading Functions
+* **Why:** Functions like `Alert("Please enable Algo Trading")` open a modal/popup dialog that blocks MT5 execution and halts chart interactivity until the user manually closes it.
+* **Result:** The user is unable to click chart buttons or trade while the dialog blocks the thread.
+* **Rule:** Use `Print()` to write to the Experts log, or display the message directly on the dashboard labels.
+
+### 7. DO NOT Recalculate All Historical Bars on Every Tick ($O(N)$)
+* **Why:** Looping through 5,000+ bars on every tick creates massive CPU overhead and lags the terminal.
+* **Result:** Delayed trade execution, slipped orders, and sluggish UI response.
+* **Rule:** Use `prev_calculated` to only compute the newest bar (`prev_calculated - 1`) in $O(1)$ time, maintaining persistent working arrays across ticks.
+
+### 8. DO NOT Forget to Sync and Compile Directly in the Terminal Folder
+* **Why:** MetaTrader 5 exclusively executes compiled `.ex5` files located in `AppData\Roaming\MetaQuotes\Terminal\<Instance_ID>\MQL5\...`.
+* **Result:** Editing source files only in the repository directory will leave the active terminal running old, buggy `.ex5` binaries.
+* **Rule:** Always copy updated `.mq5` files to the terminal directory, invoke `metaeditor64.exe` to compile them to `.ex5`, and verify the compilation exit code (`0 errors, 0 warnings`).
+
+
