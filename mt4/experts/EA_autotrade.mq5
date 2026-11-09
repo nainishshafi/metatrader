@@ -66,6 +66,45 @@ bool           g_isAutoTradeOn   = false;
 int            g_hHMA            = INVALID_HANDLE;
 bool           g_hmaLogged       = false;
 
+// Cached HMA State
+bool           g_hasHMA          = false;
+double         g_hmaTrend        = 0.0;
+double         g_hmaPrice        = 0.0;
+
+// Cached Dashboard Label State (prevents redundant GDI font re-rasterization)
+string         g_cacheTitle      = "";
+string         g_cacheEquity     = "";
+string         g_cachePrice      = "";
+string         g_cachePositions  = "";
+color          g_cachePosColor   = clrNONE;
+string         g_cacheHMA        = "";
+color          g_cacheHMAColor   = clrNONE;
+string         g_cacheTP         = "";
+string         g_cacheSL         = "";
+string         g_cacheStatus     = "";
+color          g_cacheStatusClr  = clrNONE;
+
+//+------------------------------------------------------------------+
+//| Fast Label Updater: Only touches chart object if value changed   |
+//+------------------------------------------------------------------+
+bool SetLabelIfChanged(const string name, string &cache_text, color &cache_clr, const string new_text, const color new_clr)
+  {
+   bool changed = false;
+   if(cache_text != new_text)
+     {
+      ObjectSetString(0, name, OBJPROP_TEXT, new_text);
+      cache_text = new_text;
+      changed = true;
+     }
+   if(new_clr != clrNONE && cache_clr != new_clr)
+     {
+      ObjectSetInteger(0, name, OBJPROP_COLOR, new_clr);
+      cache_clr = new_clr;
+      changed = true;
+     }
+   return(changed);
+  }
+
 //+------------------------------------------------------------------+
 //| Normalize lots according to broker specification                 |
 //+------------------------------------------------------------------+
@@ -175,7 +214,7 @@ void CreatePanelBg(string name, int x, int y, int width, int height, color bg_co
    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
    ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
    ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
-   ObjectSetInteger(0, name, OBJPROP_BACK, true);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
    ObjectSetInteger(0, name, OBJPROP_ZORDER, 0);
   }
 
@@ -184,6 +223,19 @@ void CreatePanelBg(string name, int x, int y, int width, int height, color bg_co
 //+------------------------------------------------------------------+
 void InitGUI()
   {
+   // Reset label caches on GUI creation
+   g_cacheTitle     = "";
+   g_cacheEquity    = "";
+   g_cachePrice     = "";
+   g_cachePositions = "";
+   g_cachePosColor  = clrNONE;
+   g_cacheHMA       = "";
+   g_cacheHMAColor  = clrNONE;
+   g_cacheTP        = "";
+   g_cacheSL        = "";
+   g_cacheStatus    = "";
+   g_cacheStatusClr = clrNONE;
+
    int x = InpButtonX;
    int y = InpButtonY;
    int w = InpButtonWidth;
@@ -192,7 +244,7 @@ void InitGUI()
    int total_width = 3 * w + 2 * gap; // Width across 3 buttons
    int y_row2 = y + h + gap;
 
-   // 1. Create Dashboard Background Panel FIRST (chronologically behind buttons)
+   // 1. Create Dashboard Background Panel FIRST (chronologically behind labels and buttons)
    int panel_y = y_row2 + h + 10;
    int panel_h = 168;
    CreatePanelBg(PNL_BG, x, panel_y, total_width, panel_h, C'20,24,30', clrDimGray);
@@ -284,6 +336,10 @@ int LoadHMAHandle()
 bool GetHMAData(double &trend, double &price)
   {
    if(g_hHMA == INVALID_HANDLE)
+      return(false);
+
+   // Never call CopyBuffer before BarsCalculated >= 2, otherwise MT5 blocks for 46s timeout!
+   if(BarsCalculated(g_hHMA) < 2)
       return(false);
 
    double price_arr[];
@@ -648,119 +704,130 @@ double GetAskPercentFromOpen()
   }
 
 //+------------------------------------------------------------------+
-//| Update On-Chart Dashboard Information (Labels below buttons)     |
+//| Update On-Chart Dashboard Information (Delta-only updates)       |
 //+------------------------------------------------------------------+
-void UpdateDashboard()
+void UpdateDashboard(bool force_redraw = false)
   {
+   bool any_changed = force_redraw;
+   color dummy_clr  = clrNONE;
+
    double equity   = AccountInfoDouble(ACCOUNT_EQUITY);
    double calc_lot = CalculateLotSize();
    double bid      = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    double ask      = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
 
-   // Title line
-   ObjectSetString(0, LBL_TITLE, OBJPROP_TEXT, StringFormat("XAU/USD AutoTrade (%s)", _Symbol));
+   // 1. Title line
+   if(SetLabelIfChanged(LBL_TITLE, g_cacheTitle, dummy_clr,
+                        StringFormat("XAU/USD AutoTrade (%s)", _Symbol), clrNONE))
+      any_changed = true;
 
-   // Equity & Lots
-   ObjectSetString(0, LBL_EQUITY, OBJPROP_TEXT,
-      StringFormat("Equity: $%.2f | Lot: %.2f", equity, calc_lot));
+   // 2. Equity & Lots
+   if(SetLabelIfChanged(LBL_EQUITY, g_cacheEquity, dummy_clr,
+                        StringFormat("Equity: $%.2f | Lot: %.2f", equity, calc_lot), clrNONE))
+      any_changed = true;
 
-   // Live Bid / Ask
-   ObjectSetString(0, LBL_PRICE, OBJPROP_TEXT,
-      StringFormat("Bid: %.*f | Ask: %.*f", _Digits, bid, _Digits, ask));
+   // 3. Live Bid / Ask
+   if(SetLabelIfChanged(LBL_PRICE, g_cachePrice, dummy_clr,
+                        StringFormat("Bid: %.*f | Ask: %.*f", _Digits, bid, _Digits, ask), clrNONE))
+      any_changed = true;
 
-   // Live Open Position & Current Profit
+   // 4. Live Open Position & Current Profit
    int buy_count = 0, sell_count = 0;
    double total_vol = 0.0, total_profit = 0.0;
    GetOpenPositionsSummary(buy_count, sell_count, total_vol, total_profit);
 
+   string pos_text;
+   color  pos_color;
    if(buy_count > 0 || sell_count > 0)
      {
       string pos_type = (buy_count > 0 && sell_count > 0) ? "HEDGE" : (buy_count > 0 ? "BUY" : "SELL");
-      color p_color   = (total_profit > 0.0) ? clrLime : (total_profit < 0.0 ? clrOrangeRed : clrWhite);
-      ObjectSetString(0, LBL_POSITIONS, OBJPROP_TEXT,
-         StringFormat("Trades: %s (%.2f lot) | P/L: %s$%.2f",
-                      pos_type, total_vol, (total_profit >= 0.0 ? "+" : ""), total_profit));
-      ObjectSetInteger(0, LBL_POSITIONS, OBJPROP_COLOR, p_color);
+      pos_color = (total_profit > 0.0) ? clrLime : (total_profit < 0.0 ? clrOrangeRed : clrWhite);
+      pos_text  = StringFormat("Trades: %s (%.2f lot) | P/L: %s$%.2f",
+                               pos_type, total_vol, (total_profit >= 0.0 ? "+" : ""), total_profit);
      }
    else
      {
-      ObjectSetString(0, LBL_POSITIONS, OBJPROP_TEXT, "Trades: None Open | P/L: $0.00");
-      ObjectSetInteger(0, LBL_POSITIONS, OBJPROP_COLOR, clrSilver);
+      pos_text  = "Trades: None Open | P/L: $0.00";
+      pos_color = clrSilver;
      }
+   if(SetLabelIfChanged(LBL_POSITIONS, g_cachePositions, g_cachePosColor, pos_text, pos_color))
+      any_changed = true;
 
-   // Live HMA NRP Trend Direction
+   // 5. Live HMA NRP Trend Direction
    double trend = 0.0, hma_p = 0.0;
+   string hma_text;
+   color  hma_color;
    if(GetHMAData(trend, hma_p))
      {
+      g_hasHMA   = true;
+      g_hmaTrend = trend;
+      g_hmaPrice = hma_p;
+
       if(trend == 1.0)
         {
-         ObjectSetString(0, LBL_HMA, OBJPROP_TEXT,
-            StringFormat("HMA (%s,%d): UP / Bullish (%.*f)",
-                         EnumToString(InpHMATimeFrame), InpHMAPeriod, _Digits, hma_p));
-         ObjectSetInteger(0, LBL_HMA, OBJPROP_COLOR, clrLimeGreen);
+         hma_text  = StringFormat("HMA (%s,%d): UP / Bullish (%.*f)",
+                                  EnumToString(InpHMATimeFrame), InpHMAPeriod, _Digits, hma_p);
+         hma_color = clrLimeGreen;
         }
       else if(trend == -1.0)
         {
-         ObjectSetString(0, LBL_HMA, OBJPROP_TEXT,
-            StringFormat("HMA (%s,%d): DOWN / Bearish (%.*f)",
-                         EnumToString(InpHMATimeFrame), InpHMAPeriod, _Digits, hma_p));
-         ObjectSetInteger(0, LBL_HMA, OBJPROP_COLOR, clrOrange);
+         hma_text  = StringFormat("HMA (%s,%d): DOWN / Bearish (%.*f)",
+                                  EnumToString(InpHMATimeFrame), InpHMAPeriod, _Digits, hma_p);
+         hma_color = clrOrange;
         }
       else
         {
-         ObjectSetString(0, LBL_HMA, OBJPROP_TEXT,
-            StringFormat("HMA (%s,%d): Neutral (%.*f)",
-                         EnumToString(InpHMATimeFrame), InpHMAPeriod, _Digits, hma_p));
-         ObjectSetInteger(0, LBL_HMA, OBJPROP_COLOR, clrLightGray);
+         hma_text  = StringFormat("HMA (%s,%d): Neutral (%.*f)",
+                                  EnumToString(InpHMATimeFrame), InpHMAPeriod, _Digits, hma_p);
+         hma_color = clrLightGray;
         }
      }
    else
      {
       int calc = (g_hHMA != INVALID_HANDLE) ? BarsCalculated(g_hHMA) : -1;
-      if(calc < 0)
-         ObjectSetString(0, LBL_HMA, OBJPROP_TEXT, "HMA NRP: Initializing Indicator...");
-      else
-         ObjectSetString(0, LBL_HMA, OBJPROP_TEXT, StringFormat("HMA NRP: Loading Bars (%d)...", calc));
-      ObjectSetInteger(0, LBL_HMA, OBJPROP_COLOR, clrDarkGray);
+      hma_text  = (calc < 0) ? "HMA NRP: Initializing Indicator..."
+                             : StringFormat("HMA NRP: Loading Bars (%d)...", calc);
+      hma_color = clrDarkGray;
      }
+   if(SetLabelIfChanged(LBL_HMA, g_cacheHMA, g_cacheHMAColor, hma_text, hma_color))
+      any_changed = true;
 
-   // Target Take Profit distance display
+   // 6. Target Take Profit distance display
+   string tp_text;
    if(InpTakeProfitPriceDist > 0.0)
      {
       double example_tp = (ask > 0.0) ? (ask + InpTakeProfitPriceDist) : 0.0;
-      ObjectSetString(0, LBL_TP, OBJPROP_TEXT,
-         StringFormat("Target TP: +$%.2f dist (TP: %.*f)", InpTakeProfitPriceDist, _Digits, example_tp));
+      tp_text = StringFormat("Target TP: +$%.2f dist (TP: %.*f)", InpTakeProfitPriceDist, _Digits, example_tp);
      }
    else
      {
-      ObjectSetString(0, LBL_TP, OBJPROP_TEXT, "Target TP: NONE");
+      tp_text = "Target TP: NONE";
      }
+   if(SetLabelIfChanged(LBL_TP, g_cacheTP, dummy_clr, tp_text, clrNONE))
+      any_changed = true;
 
-   // Target Stop Loss distance display
+   // 7. Target Stop Loss distance display
+   string sl_text;
    if(InpStopLossPriceDist > 0.0)
      {
       double example_sl = (ask > 0.0) ? (ask - InpStopLossPriceDist) : 0.0;
-      ObjectSetString(0, LBL_SL, OBJPROP_TEXT,
-         StringFormat("Target SL: -$%.2f dist (SL: %.*f)", InpStopLossPriceDist, _Digits, example_sl));
+      sl_text = StringFormat("Target SL: -$%.2f dist (SL: %.*f)", InpStopLossPriceDist, _Digits, example_sl);
      }
    else
      {
-      ObjectSetString(0, LBL_SL, OBJPROP_TEXT, "Stop Loss: NONE (Disabled)");
+      sl_text = "Stop Loss: NONE (Disabled)";
      }
+   if(SetLabelIfChanged(LBL_SL, g_cacheSL, dummy_clr, sl_text, clrNONE))
+      any_changed = true;
 
-   // AutoTrade Status Indicator
-   if(g_isAutoTradeOn)
-     {
-      ObjectSetString(0, LBL_STATUS, OBJPROP_TEXT, "Auto Trade: [ ON - Active ]");
-      ObjectSetInteger(0, LBL_STATUS, OBJPROP_COLOR, clrLime);
-     }
-   else
-     {
-      ObjectSetString(0, LBL_STATUS, OBJPROP_TEXT, "Auto Trade: [ OFF - Standby ]");
-      ObjectSetInteger(0, LBL_STATUS, OBJPROP_COLOR, clrOrangeRed);
-     }
+   // 8. AutoTrade Status Indicator
+   string status_text = g_isAutoTradeOn ? "Auto Trade: [ ON - Active ]" : "Auto Trade: [ OFF - Standby ]";
+   color  status_clr  = g_isAutoTradeOn ? clrLime : clrOrangeRed;
+   if(SetLabelIfChanged(LBL_STATUS, g_cacheStatus, g_cacheStatusClr, status_text, status_clr))
+      any_changed = true;
 
-   ChartRedraw(0);
+   if(any_changed)
+      ChartRedraw(0);
   }
 
 //+------------------------------------------------------------------+
@@ -789,7 +856,7 @@ int OnInit()
      }
 
    EventSetTimer(1); // 1-second timer for dashboard update
-   UpdateDashboard();
+   UpdateDashboard(true);
 
    PrintFormat("EA AutoTrade initialized successfully. Symbol: %s, Current Equity: $%.2f, Calculated Lot: %.2f",
                _Symbol, AccountInfoDouble(ACCOUNT_EQUITY), CalculateLotSize());
@@ -823,49 +890,52 @@ void OnChartEvent(const int id,
   {
    if(id == CHARTEVENT_OBJECT_CLICK)
      {
-      PrintFormat("EA AutoTrade UI: Click received on '%s'", sparam);
-
       if(sparam == BTN_BUY)
         {
          ObjectSetInteger(0, BTN_BUY, OBJPROP_STATE, false);
+         ChartRedraw(0);
          if(!CheckAlgoTradingAllowed()) return;
          double lots = CalculateLotSize();
          ExecuteBuy(lots, InpMagicManual, "Manual Buy");
-         UpdateDashboard();
+         UpdateDashboard(true);
         }
       else if(sparam == BTN_SELL)
         {
          ObjectSetInteger(0, BTN_SELL, OBJPROP_STATE, false);
+         ChartRedraw(0);
          if(!CheckAlgoTradingAllowed()) return;
          double lots = CalculateLotSize();
          ExecuteSell(lots, InpMagicManual, "Manual Sell");
-         UpdateDashboard();
+         UpdateDashboard(true);
         }
       else if(sparam == BTN_CLOSE)
         {
          ObjectSetInteger(0, BTN_CLOSE, OBJPROP_STATE, false);
+         ChartRedraw(0);
          if(!CheckAlgoTradingAllowed()) return;
          CloseAllPositions();
-         UpdateDashboard();
+         UpdateDashboard(true);
         }
       else if(sparam == BTN_CLOSE_HALF)
         {
          ObjectSetInteger(0, BTN_CLOSE_HALF, OBJPROP_STATE, false);
+         ChartRedraw(0);
          if(!CheckAlgoTradingAllowed()) return;
          CloseHalfPositions();
-         UpdateDashboard();
+         UpdateDashboard(true);
         }
       else if(sparam == BTN_UPDATE_SL)
         {
          ObjectSetInteger(0, BTN_UPDATE_SL, OBJPROP_STATE, false);
+         ChartRedraw(0);
          if(!CheckAlgoTradingAllowed()) return;
          UpdateStoplossToBreakeven();
-         UpdateDashboard();
+         UpdateDashboard(true);
         }
       else if(sparam == BTN_TRADE)
         {
          ToggleAutoTradeButton();
-         UpdateDashboard();
+         UpdateDashboard(true);
         }
      }
   }
@@ -875,7 +945,7 @@ void OnChartEvent(const int id,
 //+------------------------------------------------------------------+
 void OnTimer()
   {
-   UpdateDashboard();
+   UpdateDashboard(false);
   }
 
 //+------------------------------------------------------------------+
@@ -883,20 +953,29 @@ void OnTimer()
 //+------------------------------------------------------------------+
 void OnTick()
   {
+   bool has_open_positions = (PositionsTotal() > 0);
+
+   // Fast-path exit: if Auto Trade is OFF and no open positions need reversal monitoring, do zero work on tick
+   if(!g_isAutoTradeOn && (!InpCloseOnTrendReverse || !has_open_positions))
+      return;
+
    double currentTrend = 0.0;
    double hmaPrice     = 0.0;
    bool   hasHMA       = GetHMAData(currentTrend, hmaPrice);
 
-   // Check and manage reversal exits if auto trades are active
    if(hasHMA)
-      CloseTradeOnReversal(currentTrend, hmaPrice);
+     {
+      g_hasHMA   = true;
+      g_hmaTrend = currentTrend;
+      g_hmaPrice = hmaPrice;
+
+      // Check and manage reversal exits if auto trades are active
+      if(has_open_positions)
+         CloseTradeOnReversal(currentTrend, hmaPrice);
+     }
 
    // Automated trading logic (only when Trade button is ON)
-   if(!g_isAutoTradeOn)
-      return;
-
-   // Require valid indicator data
-   if(!hasHMA)
+   if(!g_isAutoTradeOn || !hasHMA)
       return;
 
    // Ensure no existing trade is open for this symbol

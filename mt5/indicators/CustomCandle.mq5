@@ -12,19 +12,19 @@
 #property indicator_plots   0
 
 //--- Input Parameters
-input group "--- Timeframe Settings ---"
+//--- Timeframe Settings ---
 input ENUM_TIMEFRAMES InpTimeFrame     = PERIOD_H1;          // Higher Timeframe
 input int             InpMaxCandles    = 300;                // Max HTF Candles to Draw (0 = All)
 
-input group "--- Candle Visual Settings ---"
+//--- Candle Visual Settings ---
 input color           InpUpCandle      = clrPaleTurquoise;   // Bullish Candle Color
 input color           InpDnCandle      = clrMistyRose;       // Bearish Candle Color
 input color           InpDojiColor     = clrYellow;          // Doji Candle Color
 input int             InpWidth         = 1;                  // Border & Wick Width
 input bool            InpBGCandle      = true;               // Background / Filled Body
 
-input group "--- Display Settings ---"
-input bool            InpShowComment   = true;               // Show HTF OHLC in Comment
+//--- Display Settings ---
+input bool            InpShowComment   = false;              // Show HTF OHLC in Comment
 
 //--- Global Variables
 ENUM_TIMEFRAMES ExtTimeFrame;
@@ -169,6 +169,12 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void DrawCandle(int k, const MqlRates &rate, int chart_sec, int span_sec)
 {
+   string candle_name = g_prefix + "Candle_" + IntegerToString((long)rate.time);
+
+   // Fast skip: closed historical bars (k > 1) never change once created
+   if(k > 1 && ObjectFind(0, candle_name) >= 0)
+      return;
+
    datetime t_open   = rate.time;
    datetime t_close  = t_open + (datetime)(span_sec - chart_sec);
    datetime t_shadow = t_open + (datetime)((span_sec - chart_sec) / 2);
@@ -183,51 +189,39 @@ void DrawCandle(int k, const MqlRates &rate, int chart_sec, int span_sec)
 
    color candle_color;
    bool  fill;
-   bool  back;
-   string bar_type;
+   bool  back = true;
 
    if(op < cl)
    {
       candle_color = InpUpCandle;
       fill         = InpBGCandle;
-      back         = InpBGCandle;
-      bar_type     = "UpBar";
    }
    else if(op > cl)
    {
       candle_color = InpDnCandle;
       fill         = InpBGCandle;
-      back         = InpBGCandle;
-      bar_type     = "DnBar";
    }
    else
    {
       candle_color = InpDojiColor;
       fill         = false;
-      back         = false;
-      bar_type     = "Doji";
    }
 
-   string op_str = DoubleToString(op, _Digits);
-   string cl_str = DoubleToString(cl, _Digits);
-   string hi_str = DoubleToString(hi, _Digits);
-   string lo_str = DoubleToString(lo, _Digits);
-
-   string candle_name = g_prefix + "Candle_" + IntegerToString((long)rate.time);
    string wick_h_name = g_prefix + "WickH_" + IntegerToString((long)rate.time);
    string wick_l_name = g_prefix + "WickL_" + IntegerToString((long)rate.time);
-
-   string tooltip = StringFormat("%s %s [%s]\nOpen: %s\nHigh: %s\nLow: %s\nClose: %s",
-                                 g_tf_name, bar_type, TimeToString(rate.time, TIME_DATE|TIME_MINUTES),
-                                 op_str, hi_str, lo_str, cl_str);
 
    // 1. Candle Body (OBJ_RECTANGLE)
    if(ObjectFind(0, candle_name) < 0)
    {
       ObjectCreate(0, candle_name, OBJ_RECTANGLE, 0, t_open, op, t_close, cl);
       ObjectSetInteger(0, candle_name, OBJPROP_STYLE, STYLE_SOLID);
+      ObjectSetInteger(0, candle_name, OBJPROP_WIDTH, InpWidth);
+      ObjectSetInteger(0, candle_name, OBJPROP_BACK, back);
       ObjectSetInteger(0, candle_name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, candle_name, OBJPROP_SELECTED, false);
+      ObjectSetInteger(0, candle_name, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, candle_name, OBJPROP_ZORDER, 0);
+      ObjectSetString(0, candle_name, OBJPROP_TOOLTIP, "\n");
    }
    else
    {
@@ -236,24 +230,24 @@ void DrawCandle(int k, const MqlRates &rate, int chart_sec, int span_sec)
    }
 
    ObjectSetInteger(0, candle_name, OBJPROP_COLOR, candle_color);
-   ObjectSetInteger(0, candle_name, OBJPROP_WIDTH, InpWidth);
    ObjectSetInteger(0, candle_name, OBJPROP_FILL, fill);
-   ObjectSetInteger(0, candle_name, OBJPROP_BACK, back);
-   ObjectSetString(0, candle_name, OBJPROP_TOOLTIP, tooltip);
-   ObjectSetString(0, candle_name, OBJPROP_TEXT, tooltip);
 
    // 2. High Wick (OBJ_TREND)
    if(hi > body_top)
    {
-      string tooltip_h = StringFormat("%s High: %s", g_tf_name, hi_str);
       if(ObjectFind(0, wick_h_name) < 0)
       {
          ObjectCreate(0, wick_h_name, OBJ_TREND, 0, t_shadow, body_top, t_shadow, hi);
          ObjectSetInteger(0, wick_h_name, OBJPROP_STYLE, STYLE_SOLID);
+         ObjectSetInteger(0, wick_h_name, OBJPROP_WIDTH, InpWidth);
+         ObjectSetInteger(0, wick_h_name, OBJPROP_BACK, back);
          ObjectSetInteger(0, wick_h_name, OBJPROP_RAY_RIGHT, false);
          ObjectSetInteger(0, wick_h_name, OBJPROP_RAY_LEFT, false);
          ObjectSetInteger(0, wick_h_name, OBJPROP_SELECTABLE, false);
          ObjectSetInteger(0, wick_h_name, OBJPROP_SELECTED, false);
+         ObjectSetInteger(0, wick_h_name, OBJPROP_HIDDEN, true);
+         ObjectSetInteger(0, wick_h_name, OBJPROP_ZORDER, 0);
+         ObjectSetString(0, wick_h_name, OBJPROP_TOOLTIP, "\n");
       }
       else
       {
@@ -261,12 +255,8 @@ void DrawCandle(int k, const MqlRates &rate, int chart_sec, int span_sec)
          ObjectMove(0, wick_h_name, 1, t_shadow, hi);
       }
       ObjectSetInteger(0, wick_h_name, OBJPROP_COLOR, candle_color);
-      ObjectSetInteger(0, wick_h_name, OBJPROP_WIDTH, InpWidth);
-      ObjectSetInteger(0, wick_h_name, OBJPROP_BACK, back);
-      ObjectSetString(0, wick_h_name, OBJPROP_TOOLTIP, tooltip_h);
-      ObjectSetString(0, wick_h_name, OBJPROP_TEXT, tooltip_h);
    }
-   else
+   else if(ObjectFind(0, wick_h_name) >= 0)
    {
       ObjectDelete(0, wick_h_name);
    }
@@ -274,15 +264,19 @@ void DrawCandle(int k, const MqlRates &rate, int chart_sec, int span_sec)
    // 3. Low Wick (OBJ_TREND)
    if(lo < body_bottom)
    {
-      string tooltip_l = StringFormat("%s Low: %s", g_tf_name, lo_str);
       if(ObjectFind(0, wick_l_name) < 0)
       {
          ObjectCreate(0, wick_l_name, OBJ_TREND, 0, t_shadow, body_bottom, t_shadow, lo);
          ObjectSetInteger(0, wick_l_name, OBJPROP_STYLE, STYLE_SOLID);
+         ObjectSetInteger(0, wick_l_name, OBJPROP_WIDTH, InpWidth);
+         ObjectSetInteger(0, wick_l_name, OBJPROP_BACK, back);
          ObjectSetInteger(0, wick_l_name, OBJPROP_RAY_RIGHT, false);
          ObjectSetInteger(0, wick_l_name, OBJPROP_RAY_LEFT, false);
          ObjectSetInteger(0, wick_l_name, OBJPROP_SELECTABLE, false);
          ObjectSetInteger(0, wick_l_name, OBJPROP_SELECTED, false);
+         ObjectSetInteger(0, wick_l_name, OBJPROP_HIDDEN, true);
+         ObjectSetInteger(0, wick_l_name, OBJPROP_ZORDER, 0);
+         ObjectSetString(0, wick_l_name, OBJPROP_TOOLTIP, "\n");
       }
       else
       {
@@ -290,12 +284,8 @@ void DrawCandle(int k, const MqlRates &rate, int chart_sec, int span_sec)
          ObjectMove(0, wick_l_name, 1, t_shadow, lo);
       }
       ObjectSetInteger(0, wick_l_name, OBJPROP_COLOR, candle_color);
-      ObjectSetInteger(0, wick_l_name, OBJPROP_WIDTH, InpWidth);
-      ObjectSetInteger(0, wick_l_name, OBJPROP_BACK, back);
-      ObjectSetString(0, wick_l_name, OBJPROP_TOOLTIP, tooltip_l);
-      ObjectSetString(0, wick_l_name, OBJPROP_TEXT, tooltip_l);
    }
-   else
+   else if(ObjectFind(0, wick_l_name) >= 0)
    {
       ObjectDelete(0, wick_l_name);
    }
@@ -398,7 +388,6 @@ int OnCalculate(const int rates_total,
       g_history_drawn     = true;
 
       UpdateComment(htf_rates[0]);
-      ChartRedraw(0);
       return(rates_total);
    }
 
@@ -416,7 +405,6 @@ int OnCalculate(const int rates_total,
       g_last_close = htf_rates[0].close;
 
       UpdateComment(htf_rates[0]);
-      ChartRedraw(0);
    }
 
    return(rates_total);

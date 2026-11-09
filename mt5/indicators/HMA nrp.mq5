@@ -77,9 +77,9 @@ enum enDisplay
 };
 
 //+------------------------------------------------------------------+
-//| Input Parameters                                                 |
+//| Input Parameters (No 'input group' to preserve iCustom indexing) |
 //+------------------------------------------------------------------+
-input group "--- HMA Settings ---"
+//--- HMA Settings ---
 input ENUM_TIMEFRAMES TimeFrame       = PERIOD_M15;     // Time frame to use
 input int             HMAPeriod       = 21;             // Hma Period to use (21 is standard for M15)
 input enPrices        HMAPrice        = pr_haweighted;  // Price to use
@@ -89,7 +89,7 @@ input enDisplay       DisplayType     = en_lin;         // Display type
 input int             Shift           = 0;              // Hull shift
 input int             LinesWidth      = 3;              // Lines width (when lines are displayed)
 
-input group "--- Alert Settings ---"
+//--- Alert Settings ---
 input bool            alertsOn        = false;          // Turn alerts on?
 input bool            alertsOnCurrent = false;          // Alerts on still open bar?
 input bool            alertsMessage   = true;           // Alerts should show popup message?
@@ -97,7 +97,7 @@ input bool            alertsSound     = false;          // Alerts should play a 
 input bool            alertsEmail     = false;          // Alerts should send email?
 input bool            alertsPushNotif = false;          // Alerts should send notification?
 
-input group "--- Arrow Settings ---"
+//--- Arrow Settings ---
 input bool            ArrowOnFirst    = true;           // Arrow on first bars
 input int             UpArrowSize     = 2;              // Up Arrow size
 input int             DnArrowSize     = 2;              // Down Arrow size
@@ -108,11 +108,11 @@ input double          DnArrowGap      = 0.5;            // Dn Arrow gap (ATR mul
 input color           UpArrowColor    = clrLimeGreen;   // Up Arrow Color
 input color           DnArrowColor    = clrOrange;      // Down Arrow Color
 
-input group "--- MTF Settings ---"
+//--- MTF Settings ---
 input bool            Interpolate     = true;           // Interpolate in multi time frame mode?
 
 //+------------------------------------------------------------------+
-//| Indicator Buffers                                                |
+//| Indicator Buffers & Persistent Working Arrays                    |
 //+------------------------------------------------------------------+
 double HmaBuffer[];
 double HmaColorBuffer[];
@@ -120,6 +120,14 @@ double ArrowUpBuffer[];
 double ArrowDnBuffer[];
 double TrendBuffer[];
 double TemBuffer[];
+
+// Persistent arrays for O(1) incremental Single-Timeframe calculation
+double g_stfPrice[];
+double g_stfHaOpen[];
+double g_stfHaClose[];
+double g_stfMaHalf[];
+double g_stfMaFull[];
+double g_stfAtr[];
 
 //+------------------------------------------------------------------+
 //| Custom helper: Timeframe to String                               |
@@ -181,39 +189,54 @@ void DoAlert(const string doWhat, const datetime barTime)
 }
 
 //+------------------------------------------------------------------+
-//| Calculate Price Series (including Heiken Ashi options)          |
+//| Validate & Resolve Target Timeframe                              |
 //+------------------------------------------------------------------+
-void CalculatePrices(const double &open[],
-                     const double &high[],
-                     const double &low[],
-                     const double &close[],
-                     const int total,
-                     const enPrices tprice,
-                     double &price[])
+ENUM_TIMEFRAMES ResolveTargetTimeframe(ENUM_TIMEFRAMES tf, ENUM_TIMEFRAMES currentTf)
 {
-   if(ArraySize(price) != total)
-      ArrayResize(price, total);
+   if(tf == PERIOD_CURRENT)
+      return currentTf;
+   int tfSec  = PeriodSeconds(tf);
+   int curSec = PeriodSeconds(currentTf);
+   if(tfSec <= 0 || tfSec <= curSec)
+      return currentTf;
+   return tf;
+}
+
+//+------------------------------------------------------------------+
+//| Calculate Price Series (Incremental O(1) per tick)               |
+//+------------------------------------------------------------------+
+void CalculatePricesIncremental(const double &open[],
+                                const double &high[],
+                                const double &low[],
+                                const double &close[],
+                                const int total,
+                                const int start,
+                                const enPrices tprice,
+                                double &price[],
+                                double &haOpenArr[],
+                                double &haCloseArr[])
+{
    if(total <= 0)
       return;
+   if(ArraySize(price) < total)
+      ArrayResize(price, total, 1024);
+
+   int begin = (start < 0) ? 0 : start;
 
    if(tprice >= pr_haclose)
    {
-      double haOpen = 0.0, haClose = 0.0, haHigh = 0.0, haLow = 0.0;
-      double prevHaOpen = 0.0, prevHaClose = 0.0;
+      if(ArraySize(haOpenArr) < total)  ArrayResize(haOpenArr, total, 1024);
+      if(ArraySize(haCloseArr) < total) ArrayResize(haCloseArr, total, 1024);
 
-      for(int r = 0; r < total; r++)
+      for(int r = begin; r < total; r++)
       {
-         if(r == 0)
-            haOpen = (open[0] + close[0]) / 2.0;
-         else
-            haOpen = (prevHaOpen + prevHaClose) / 2.0;
+         double haOpen  = (r == 0) ? (open[0] + close[0]) / 2.0 : (haOpenArr[r - 1] + haCloseArr[r - 1]) / 2.0;
+         double haClose = (open[r] + high[r] + low[r] + close[r]) / 4.0;
+         double haHigh  = MathMax(high[r], MathMax(haOpen, haClose));
+         double haLow   = MathMin(low[r],  MathMin(haOpen, haClose));
 
-         haClose = (open[r] + high[r] + low[r] + close[r]) / 4.0;
-         haHigh  = MathMax(high[r], MathMax(haOpen, haClose));
-         haLow   = MathMin(low[r],  MathMin(haOpen, haClose));
-
-         prevHaOpen  = haOpen;
-         prevHaClose = haClose;
+         haOpenArr[r]  = haOpen;
+         haCloseArr[r] = haClose;
 
          switch(tprice)
          {
@@ -240,7 +263,7 @@ void CalculatePrices(const double &open[],
    }
    else
    {
-      for(int r = 0; r < total; r++)
+      for(int r = begin; r < total; r++)
       {
          switch(tprice)
          {
@@ -268,27 +291,26 @@ void CalculatePrices(const double &open[],
 }
 
 //+------------------------------------------------------------------+
-//| Calculate Moving Average Engine (SMA, EMA, SMMA, LWMA, TEMA)     |
+//| Calculate Moving Average Engine (Incremental O(1) per tick)      |
 //+------------------------------------------------------------------+
-void CalculateMa(const double &src[], const int total, const int period, const enMaTypes mode, double &dst[])
+void CalculateMaIncremental(const double &src[],
+                            const int total,
+                            const int start,
+                            const int period,
+                            const enMaTypes mode,
+                            double &dst[])
 {
    if(total <= 0)
       return;
 
-   if(ArraySize(dst) < total)
-   {
-      ResetLastError();
-      ArrayResize(dst, total);
-      ResetLastError();
-   }
-
    int p = (period < 1) ? 1 : period;
+   int begin = (start < 0) ? 0 : start;
 
    switch(mode)
    {
       case ma_sma:
       {
-         for(int r = 0; r < total; r++)
+         for(int r = begin; r < total; r++)
          {
             double sum = 0.0;
             int count = 0;
@@ -305,7 +327,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       case ma_ema:
       {
          double alpha = 2.0 / (1.0 + (double)p);
-         for(int r = 0; r < total; r++)
+         for(int r = begin; r < total; r++)
          {
             if(r == 0 || p <= 1)
                dst[r] = src[r];
@@ -317,7 +339,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
 
       case ma_smma:
       {
-         for(int r = 0; r < total; r++)
+         for(int r = begin; r < total; r++)
          {
             if(r <= 1 || p <= 1)
                dst[r] = src[r];
@@ -331,11 +353,11 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       {
          if(p <= 1)
          {
-            for(int r = 0; r < total; r++)
+            for(int r = begin; r < total; r++)
                dst[r] = src[r];
             break;
          }
-         for(int r = 0; r < total; r++)
+         for(int r = begin; r < total; r++)
          {
             double sumw = 0.0;
             double sum  = 0.0;
@@ -354,7 +376,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       {
          if(p <= 1)
          {
-            for(int r = 0; r < total; r++)
+            for(int r = begin; r < total; r++)
                dst[r] = src[r];
             break;
          }
@@ -381,7 +403,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
 
       default:
       {
-         for(int r = 0; r < total; r++)
+         for(int r = begin; r < total; r++)
             dst[r] = src[r];
          break;
       }
@@ -389,20 +411,26 @@ void CalculateMa(const double &src[], const int total, const int period, const e
 }
 
 //+------------------------------------------------------------------+
-//| Calculate HMA Series Pipeline                                    |
+//| Calculate HMA Series Pipeline (Incremental O(1) per tick)        |
 //+------------------------------------------------------------------+
-void CalculateHmaSeries(const double &open[],
-                        const double &high[],
-                        const double &low[],
-                        const double &close[],
-                        const int total,
-                        int hmaPeriod,
-                        double hmaSpeed,
-                        enPrices priceType,
-                        enMaTypes maType,
-                        double &outHma[],
-                        double &outTrend[],
-                        double &outTem[])
+void CalculateHmaSeriesIncremental(const double &open[],
+                                   const double &high[],
+                                   const double &low[],
+                                   const double &close[],
+                                   const int total,
+                                   const int start,
+                                   int hmaPeriod,
+                                   double hmaSpeed,
+                                   enPrices priceType,
+                                   enMaTypes maType,
+                                   double &priceBuf[],
+                                   double &haOpenBuf[],
+                                   double &haCloseBuf[],
+                                   double &maHalfBuf[],
+                                   double &maFullBuf[],
+                                   double &outHma[],
+                                   double &outTrend[],
+                                   double &outTem[])
 {
    if(total <= 0)
       return;
@@ -414,23 +442,25 @@ void CalculateHmaSeries(const double &open[],
    int hullPeriod = (int)MathFloor(MathSqrt((double)period));
    if(hullPeriod < 1) hullPeriod = 1;
 
-   double price[];
-   CalculatePrices(open, high, low, close, total, priceType, price);
+   int begin = (start < 0) ? 0 : start;
 
-   double maHalf[];
-   double maFull[];
-   ArrayResize(maHalf, total);
-   ArrayResize(maFull, total);
-   CalculateMa(price, total, halfPeriod, maType, maHalf);
-   CalculateMa(price, total, period,     maType, maFull);
+   CalculatePricesIncremental(open, high, low, close, total, begin, priceType, priceBuf, haOpenBuf, haCloseBuf);
 
-   for(int r = 0; r < total; r++)
-      outTem[r] = 2.0 * maHalf[r] - maFull[r];
+   if(ArraySize(maHalfBuf) < total) ArrayResize(maHalfBuf, total, 1024);
+   if(ArraySize(maFullBuf) < total) ArrayResize(maFullBuf, total, 1024);
 
-   CalculateMa(outTem, total, hullPeriod, maType, outHma);
+   CalculateMaIncremental(priceBuf, total, begin, halfPeriod, maType, maHalfBuf);
+   CalculateMaIncremental(priceBuf, total, begin, period,     maType, maFullBuf);
 
-   outTrend[0] = 0.0;
-   for(int r = 1; r < total; r++)
+   for(int r = begin; r < total; r++)
+      outTem[r] = 2.0 * maHalfBuf[r] - maFullBuf[r];
+
+   CalculateMaIncremental(outTem, total, begin, hullPeriod, maType, outHma);
+
+   if(begin == 0)
+      outTrend[0] = 0.0;
+   int trendStart = (begin < 1) ? 1 : begin;
+   for(int r = trendStart; r < total; r++)
    {
       if(outHma[r] > outHma[r - 1])
          outTrend[r] = 1.0;
@@ -442,24 +472,26 @@ void CalculateHmaSeries(const double &open[],
 }
 
 //+------------------------------------------------------------------+
-//| Calculate Smoothed ATR for Arrow Offsets                         |
+//| Calculate Smoothed ATR (Incremental O(1) per tick)               |
 //+------------------------------------------------------------------+
-void CalculateAtr(const double &high[],
-                  const double &low[],
-                  const double &close[],
-                  const int total,
-                  const int period,
-                  double &atr[])
+void CalculateAtrIncremental(const double &high[],
+                             const double &low[],
+                             const double &close[],
+                             const int total,
+                             const int start,
+                             const int period,
+                             double &atr[])
 {
-   if(ArraySize(atr) != total)
-      ArrayResize(atr, total);
    if(total <= 0)
       return;
+   if(ArraySize(atr) < total)
+      ArrayResize(atr, total, 1024);
 
    int p = (period < 1) ? 1 : period;
+   int begin = (start < p) ? 0 : start;
    double trSum = 0.0;
 
-   for(int r = 0; r < total; r++)
+   for(int r = begin; r < total; r++)
    {
       double tr;
       if(r == 0)
@@ -567,7 +599,7 @@ int OnInit()
 
    //--- Label & ShortName
    ENUM_TIMEFRAMES currentTf = (ENUM_TIMEFRAMES)_Period;
-   ENUM_TIMEFRAMES targetTf  = (TimeFrame == PERIOD_CURRENT || TimeFrame <= currentTf) ? currentTf : TimeFrame;
+   ENUM_TIMEFRAMES targetTf  = ResolveTargetTimeframe(TimeFrame, currentTf);
    string shortName = StringFormat("%s HMA(%d)", TimeframeToString(targetTf), HMAPeriod);
 
    IndicatorSetString(INDICATOR_SHORTNAME, shortName);
@@ -599,27 +631,27 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-
-
    if(rates_total < 2)
       return 0;
 
    ENUM_TIMEFRAMES currentTf = (ENUM_TIMEFRAMES)_Period;
-   ENUM_TIMEFRAMES targetTf  = (TimeFrame == PERIOD_CURRENT || TimeFrame <= currentTf) ? currentTf : TimeFrame;
+   ENUM_TIMEFRAMES targetTf  = ResolveTargetTimeframe(TimeFrame, currentTf);
 
    //+------------------------------------------------------------------+
-   //| Single Timeframe Mode                                            |
+   //| Single Timeframe Mode (Incremental O(1) per tick)                |
    //+------------------------------------------------------------------+
    if(targetTf == currentTf)
    {
-      CalculateHmaSeries(open, high, low, close, rates_total,
-                         HMAPeriod, HMASpeed, HMAPrice, HMAMethod,
-                         HmaBuffer, TrendBuffer, TemBuffer);
+      int start = (prev_calculated > 2 && prev_calculated <= rates_total) ? (prev_calculated - 1) : 0;
 
-      double atr[];
-      CalculateAtr(high, low, close, rates_total, 15, atr);
+      CalculateHmaSeriesIncremental(open, high, low, close, rates_total, start,
+                                    HMAPeriod, HMASpeed, HMAPrice, HMAMethod,
+                                    g_stfPrice, g_stfHaOpen, g_stfHaClose, g_stfMaHalf, g_stfMaFull,
+                                    HmaBuffer, TrendBuffer, TemBuffer);
 
-      for(int i = 0; i < rates_total; i++)
+      CalculateAtrIncremental(high, low, close, rates_total, start, 15, g_stfAtr);
+
+      for(int i = start; i < rates_total; i++)
       {
          HmaColorBuffer[i] = (TrendBuffer[i] == 1.0) ? 0.0 : 1.0;
          ArrowUpBuffer[i]  = EMPTY_VALUE;
@@ -628,9 +660,9 @@ int OnCalculate(const int rates_total,
          if(i > 0 && TrendBuffer[i] != TrendBuffer[i - 1])
          {
             if(TrendBuffer[i] == 1.0)
-               ArrowUpBuffer[i] = MathMin(HmaBuffer[i], low[i])  - atr[i] * UpArrowGap;
+               ArrowUpBuffer[i] = MathMin(HmaBuffer[i], low[i])  - g_stfAtr[i] * UpArrowGap;
             else if(TrendBuffer[i] == -1.0)
-               ArrowDnBuffer[i] = MathMax(HmaBuffer[i], high[i]) + atr[i] * DnArrowGap;
+               ArrowDnBuffer[i] = MathMax(HmaBuffer[i], high[i]) + g_stfAtr[i] * DnArrowGap;
          }
       }
 
@@ -647,17 +679,21 @@ int OnCalculate(const int rates_total,
          }
       }
 
-
-
       return rates_total;
    }
 
    //+------------------------------------------------------------------+
    //| Multi-Timeframe (MTF) Mode                                       |
    //+------------------------------------------------------------------+
+   long targetTfSec = PeriodSeconds(targetTf);
+   if(targetTfSec <= 0) targetTfSec = 3600;
+   long curTfSec = MathMax(1, PeriodSeconds(currentTf));
+   int  barsPerHtf = (int)MathMax(1, targetTfSec / curTfSec);
+   int  htfBarsToCopy = MathMin(rates_total, (rates_total / barsPerHtf) + HMAPeriod * 3 + 20);
+
    MqlRates htfRates[];
    ArraySetAsSeries(htfRates, false);
-   int copied = CopyRates(_Symbol, targetTf, 0, rates_total, htfRates);
+   int copied = CopyRates(_Symbol, targetTf, 0, htfBarsToCopy, htfRates);
    if(copied < 2)
       return prev_calculated;
 
@@ -675,18 +711,24 @@ int OnCalculate(const int rates_total,
       htfClose[k] = htfRates[k].close;
    }
 
+   double htfPrice[], htfHaOpen[], htfHaClose[], htfMaHalf[], htfMaFull[];
    double htfHma[], htfTrend[], htfTem[];
-   CalculateHmaSeries(htfOpen, htfHigh, htfLow, htfClose, copied,
-                      HMAPeriod, HMASpeed, HMAPrice, HMAMethod,
-                      htfHma, htfTrend, htfTem);
+   ArrayResize(htfHma,   copied);
+   ArrayResize(htfTrend, copied);
+   ArrayResize(htfTem,   copied);
 
-   double atr[];
-   CalculateAtr(high, low, close, rates_total, 15, atr);
+   CalculateHmaSeriesIncremental(htfOpen, htfHigh, htfLow, htfClose, copied, 0,
+                                 HMAPeriod, HMASpeed, HMAPrice, HMAMethod,
+                                 htfPrice, htfHaOpen, htfHaClose, htfMaHalf, htfMaFull,
+                                 htfHma, htfTrend, htfTem);
 
-   long targetTfSec = PeriodSeconds(targetTf);
-   if(targetTfSec <= 0) targetTfSec = 3600;
+   int start = (prev_calculated > 2 && prev_calculated <= rates_total)
+               ? MathMax(0, prev_calculated - barsPerHtf * 2 - 2)
+               : 0;
 
-   for(int i = 0; i < rates_total; i++)
+   CalculateAtrIncremental(high, low, close, rates_total, start, 15, g_stfAtr);
+
+   for(int i = start; i < rates_total; i++)
    {
       ArrowUpBuffer[i] = EMPTY_VALUE;
       ArrowDnBuffer[i] = EMPTY_VALUE;
@@ -743,9 +785,9 @@ int OnCalculate(const int rates_total,
          if(shouldPlace)
          {
             if(htfTrend[k] == 1.0)
-               ArrowUpBuffer[i] = MathMin(HmaBuffer[i], low[i])  - atr[i] * UpArrowGap;
+               ArrowUpBuffer[i] = MathMin(HmaBuffer[i], low[i])  - g_stfAtr[i] * UpArrowGap;
             else if(htfTrend[k] == -1.0)
-               ArrowDnBuffer[i] = MathMax(HmaBuffer[i], high[i]) + atr[i] * DnArrowGap;
+               ArrowDnBuffer[i] = MathMax(HmaBuffer[i], high[i]) + g_stfAtr[i] * DnArrowGap;
          }
       }
    }
