@@ -272,9 +272,11 @@ void CalculatePrices(const double &open[],
 //+------------------------------------------------------------------+
 void CalculateMa(const double &src[], const int total, const int period, const enMaTypes mode, double &dst[])
 {
-   if(ArraySize(dst) != total)
-      ArrayResize(dst, total);
    if(total <= 0)
+      return;
+
+   double temp[];
+   if(ArrayResize(temp, total) < 0)
       return;
 
    int p = (period < 1) ? 1 : period;
@@ -292,7 +294,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
                sum += src[r - k];
                count++;
             }
-            dst[r] = (count > 0) ? (sum / (double)count) : src[r];
+            temp[r] = (count > 0) ? (sum / (double)count) : src[r];
          }
          break;
       }
@@ -303,9 +305,9 @@ void CalculateMa(const double &src[], const int total, const int period, const e
          for(int r = 0; r < total; r++)
          {
             if(r == 0 || p <= 1)
-               dst[r] = src[r];
+               temp[r] = src[r];
             else
-               dst[r] = dst[r - 1] + alpha * (src[r] - dst[r - 1]);
+               temp[r] = temp[r - 1] + alpha * (src[r] - temp[r - 1]);
          }
          break;
       }
@@ -315,9 +317,9 @@ void CalculateMa(const double &src[], const int total, const int period, const e
          for(int r = 0; r < total; r++)
          {
             if(r <= 1 || p <= 1)
-               dst[r] = src[r];
+               temp[r] = src[r];
             else
-               dst[r] = dst[r - 1] + (src[r] - dst[r - 1]) / (double)p;
+               temp[r] = temp[r - 1] + (src[r] - temp[r - 1]) / (double)p;
          }
          break;
       }
@@ -327,7 +329,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
          if(p <= 1)
          {
             for(int r = 0; r < total; r++)
-               dst[r] = src[r];
+               temp[r] = src[r];
             break;
          }
          for(int r = 0; r < total; r++)
@@ -340,7 +342,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
                sumw += weight;
                sum  += weight * src[r - k];
             }
-            dst[r] = (sumw > 0.0) ? (sum / sumw) : src[r];
+            temp[r] = (sumw > 0.0) ? (sum / sumw) : src[r];
          }
          break;
       }
@@ -350,7 +352,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
          if(p <= 1)
          {
             for(int r = 0; r < total; r++)
-               dst[r] = src[r];
+               temp[r] = src[r];
             break;
          }
          double alpha = 2.0 / (1.0 + (double)p);
@@ -369,7 +371,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
                tema2 = tema2 + alpha * (tema1 - tema2);
                tema3 = tema3 + alpha * (tema2 - tema3);
             }
-            dst[r] = tema3 + 3.0 * (tema1 - tema2);
+            temp[r] = tema3 + 3.0 * (tema1 - tema2);
          }
          break;
       }
@@ -377,10 +379,13 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       default:
       {
          for(int r = 0; r < total; r++)
-            dst[r] = src[r];
+            temp[r] = src[r];
          break;
       }
    }
+
+   for(int r = 0; r < total; r++)
+      dst[r] = temp[r];
 }
 
 //+------------------------------------------------------------------+
@@ -417,15 +422,11 @@ void CalculateHmaSeries(const double &open[],
    CalculateMa(price, total, halfPeriod, maType, maHalf);
    CalculateMa(price, total, period,     maType, maFull);
 
-   if(ArraySize(outTem) != total)
-      ArrayResize(outTem, total);
    for(int r = 0; r < total; r++)
       outTem[r] = 2.0 * maHalf[r] - maFull[r];
 
    CalculateMa(outTem, total, hullPeriod, maType, outHma);
 
-   if(ArraySize(outTrend) != total)
-      ArrayResize(outTrend, total);
    outTrend[0] = 0.0;
    for(int r = 1; r < total; r++)
    {
