@@ -175,8 +175,8 @@ void CreatePanelBg(string name, int x, int y, int width, int height, color bg_co
    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
    ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
    ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
-   ObjectSetInteger(0, name, OBJPROP_BACK, false);
-   ObjectSetInteger(0, name, OBJPROP_ZORDER, 1);
+   ObjectSetInteger(0, name, OBJPROP_BACK, true);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 0);
   }
 
 //+------------------------------------------------------------------+
@@ -190,25 +190,14 @@ void InitGUI()
    int h = InpButtonHeight;
    int gap = 8;
    int total_width = 3 * w + 2 * gap; // Width across 3 buttons
-
-   // Row 1 Buttons: BUY, SELL, Close All
-   CreateButton(BTN_BUY,   "BUY",       x,                 y, w, h, clrForestGreen,   clrWhite);
-   CreateButton(BTN_SELL,  "SELL",      x + (w + gap),     y, w, h, clrCrimson,       clrWhite);
-   CreateButton(BTN_CLOSE, "Close All", x + 2 * (w + gap), y, w, h, clrDarkSlateGray, clrWhite);
-
-   // Row 2 Buttons: Close Half, Update SL (Breakeven), AutoTrade Toggle
    int y_row2 = y + h + gap;
-   CreateButton(BTN_CLOSE_HALF, "Close Half", x,                 y_row2, w, h, clrSteelBlue,  clrWhite);
-   CreateButton(BTN_UPDATE_SL,  "Update SL",  x + (w + gap),     y_row2, w, h, clrDarkOrange, clrWhite);
-   CreateButton(BTN_TRADE,      (g_isAutoTradeOn ? "Trade: ON" : "Trade: OFF"),
-                                              x + 2 * (w + gap), y_row2, w, h,
-                                              (g_isAutoTradeOn ? clrGreen : clrRed), clrWhite);
 
-   // Dashboard sits cleanly BELOW the buttons with zero overlap
+   // 1. Create Dashboard Background Panel FIRST (chronologically behind buttons)
    int panel_y = y_row2 + h + 10;
    int panel_h = 168;
    CreatePanelBg(PNL_BG, x, panel_y, total_width, panel_h, C'20,24,30', clrDimGray);
 
+   // 2. Create Dashboard Information Labels
    int lbl_x = x + 10;
    CreateLabel(LBL_TITLE,     "XAU/USD AutoTrade",                   lbl_x, panel_y + 8,   clrGold,        9, true);
    CreateLabel(LBL_EQUITY,    "Equity: $0.00 | Lot: 0.00",           lbl_x, panel_y + 27,  clrPaleGreen,   9, false);
@@ -218,6 +207,17 @@ void InitGUI()
    CreateLabel(LBL_TP,        "Target TP: +$0.00 distance",          lbl_x, panel_y + 103, clrDeepSkyBlue, 9, false);
    CreateLabel(LBL_SL,        "Stop Loss: NONE",                     lbl_x, panel_y + 122, clrLightGray,   9, false);
    CreateLabel(LBL_STATUS,    "Auto Trade: [ OFF - Standby ]",       lbl_x, panel_y + 141, clrOrangeRed,   9, true);
+
+   // 3. Create Interactive Buttons LAST so they are on top of the visual and input hierarchy
+   CreateButton(BTN_BUY,   "BUY",       x,                 y, w, h, clrForestGreen,   clrWhite);
+   CreateButton(BTN_SELL,  "SELL",      x + (w + gap),     y, w, h, clrCrimson,       clrWhite);
+   CreateButton(BTN_CLOSE, "Close All", x + 2 * (w + gap), y, w, h, clrDarkSlateGray, clrWhite);
+
+   CreateButton(BTN_CLOSE_HALF, "Close Half", x,                 y_row2, w, h, clrSteelBlue,  clrWhite);
+   CreateButton(BTN_UPDATE_SL,  "Update SL",  x + (w + gap),     y_row2, w, h, clrDarkOrange, clrWhite);
+   CreateButton(BTN_TRADE,      (g_isAutoTradeOn ? "Trade: ON" : "Trade: OFF"),
+                                              x + 2 * (w + gap), y_row2, w, h,
+                                              (g_isAutoTradeOn ? clrGreen : clrRed), clrWhite);
 
    Comment(""); // Clear chart comment to prevent any background text collision
   }
@@ -289,8 +289,6 @@ bool GetHMAData(double &trend, double &price)
    double price_arr[];
    ArraySetAsSeries(price_arr, true);
 
-   // Buffer 0 is HmaBuffer (HMA price line) - Always reliable & accessible
-   // Calling CopyBuffer triggers MT5 background calculation engine
    ResetLastError();
    int copied_price = CopyBuffer(g_hHMA, 0, 0, 2, price_arr);
    if(copied_price < 2 || price_arr[0] == EMPTY_VALUE || price_arr[0] <= 0.0)
@@ -366,13 +364,11 @@ bool CheckAlgoTradingAllowed()
    if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
      {
       Print("Warning: MT5 'Algo Trading' button is OFF! Please click 'Algo Trading' in top MT5 toolbar.");
-      Alert("Please enable 'Algo Trading' in the top MT5 toolbar to place orders.");
       return(false);
      }
    if(!MQLInfoInteger(MQL_TRADE_ALLOWED))
      {
       Print("Warning: 'Allow Algo Trading' is disabled in EA Properties! Press F7 -> Common -> Check 'Allow Algo Trading'.");
-      Alert("Please press F7 -> Common tab -> Check 'Allow Algo Trading'.");
       return(false);
      }
    return(true);
@@ -887,8 +883,6 @@ void OnTimer()
 //+------------------------------------------------------------------+
 void OnTick()
   {
-   UpdateDashboard();
-
    double currentTrend = 0.0;
    double hmaPrice     = 0.0;
    bool   hasHMA       = GetHMAData(currentTrend, hmaPrice);

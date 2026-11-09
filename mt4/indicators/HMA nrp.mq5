@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright   "www.forex-station.com"
 #property link        "www.forex-station.com"
-#property version     "2.10"
+#property version     "2.00"
 #property description "Hull Moving Average (HMA) Non-Repainting with MTF, Alerts & Multi-Price/MA Types"
 
 #property indicator_chart_window
@@ -90,7 +90,7 @@ input int             Shift           = 0;              // Hull shift
 input int             LinesWidth      = 3;              // Lines width (when lines are displayed)
 
 input group "--- Alert Settings ---"
-input bool            alertsOn        = true;           // Turn alerts on?
+input bool            alertsOn        = false;          // Turn alerts on?
 input bool            alertsOnCurrent = false;          // Alerts on still open bar?
 input bool            alertsMessage   = true;           // Alerts should show popup message?
 input bool            alertsSound     = false;          // Alerts should play a sound?
@@ -191,10 +191,10 @@ void CalculatePrices(const double &open[],
                      const enPrices tprice,
                      double &price[])
 {
-   if(total <= 0)
-      return;
    if(ArraySize(price) != total)
       ArrayResize(price, total);
+   if(total <= 0)
+      return;
 
    if(tprice >= pr_haclose)
    {
@@ -275,7 +275,6 @@ void CalculateMa(const double &src[], const int total, const int period, const e
    if(total <= 0)
       return;
 
-   // If dst is dynamic and not sized yet (e.g. maHalf, maFull), resize it
    if(ArraySize(dst) < total)
    {
       ResetLastError();
@@ -284,13 +283,12 @@ void CalculateMa(const double &src[], const int total, const int period, const e
    }
 
    int p = (period < 1) ? 1 : period;
-   int limit = MathMin(total, ArraySize(dst));
 
    switch(mode)
    {
       case ma_sma:
       {
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             double sum = 0.0;
             int count = 0;
@@ -307,7 +305,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       case ma_ema:
       {
          double alpha = 2.0 / (1.0 + (double)p);
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             if(r == 0 || p <= 1)
                dst[r] = src[r];
@@ -319,7 +317,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
 
       case ma_smma:
       {
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             if(r <= 1 || p <= 1)
                dst[r] = src[r];
@@ -333,11 +331,11 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       {
          if(p <= 1)
          {
-            for(int r = 0; r < limit; r++)
+            for(int r = 0; r < total; r++)
                dst[r] = src[r];
             break;
          }
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             double sumw = 0.0;
             double sum  = 0.0;
@@ -356,13 +354,13 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       {
          if(p <= 1)
          {
-            for(int r = 0; r < limit; r++)
+            for(int r = 0; r < total; r++)
                dst[r] = src[r];
             break;
          }
          double alpha = 2.0 / (1.0 + (double)p);
          double tema1 = 0.0, tema2 = 0.0, tema3 = 0.0;
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             if(r == 0)
             {
@@ -383,7 +381,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
 
       default:
       {
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
             dst[r] = src[r];
          break;
       }
@@ -426,16 +424,13 @@ void CalculateHmaSeries(const double &open[],
    CalculateMa(price, total, halfPeriod, maType, maHalf);
    CalculateMa(price, total, period,     maType, maFull);
 
-   int limitTem = MathMin(total, ArraySize(outTem));
-   for(int r = 0; r < limitTem; r++)
+   for(int r = 0; r < total; r++)
       outTem[r] = 2.0 * maHalf[r] - maFull[r];
 
    CalculateMa(outTem, total, hullPeriod, maType, outHma);
 
-   int limitTrend = MathMin(total, ArraySize(outTrend));
-   int limitHma   = MathMin(total, ArraySize(outHma));
-   if(limitTrend > 0) outTrend[0] = 0.0;
-   for(int r = 1; r < limitTrend && r < limitHma; r++)
+   outTrend[0] = 0.0;
+   for(int r = 1; r < total; r++)
    {
       if(outHma[r] > outHma[r - 1])
          outTrend[r] = 1.0;
@@ -456,54 +451,65 @@ void CalculateAtr(const double &high[],
                   const int period,
                   double &atr[])
 {
-   if(total <= 0)
-      return;
    if(ArraySize(atr) != total)
       ArrayResize(atr, total);
+   if(total <= 0)
+      return;
 
    int p = (period < 1) ? 1 : period;
-   double tr[];
-   ArrayResize(tr, total);
+   double trSum = 0.0;
 
    for(int r = 0; r < total; r++)
    {
+      double tr;
       if(r == 0)
-         tr[r] = high[r] - low[r];
+      {
+         tr = high[0] - low[0];
+      }
       else
       {
-         double d1 = high[r] - low[r];
-         double d2 = MathAbs(high[r] - close[r - 1]);
-         double d3 = MathAbs(low[r]  - close[r - 1]);
-         tr[r] = MathMax(d1, MathMax(d2, d3));
+         double hl = high[r] - low[r];
+         double hc = MathAbs(high[r] - close[r - 1]);
+         double lc = MathAbs(low[r] - close[r - 1]);
+         tr = MathMax(hl, MathMax(hc, lc));
+      }
+
+      if(r < p)
+      {
+         trSum += tr;
+         atr[r] = trSum / (double)(r + 1);
+      }
+      else
+      {
+         atr[r] = (atr[r - 1] * (double)(p - 1) + tr) / (double)p;
       }
    }
-
-   CalculateMa(tr, total, p, ma_smma, atr);
 }
 
 //+------------------------------------------------------------------+
-//| Find Corresponding Higher Timeframe Bar Index                    |
+//| Fast Binary Search for Higher Timeframe Bar Matching             |
 //+------------------------------------------------------------------+
-int FindHtfBar(const datetime searchTime, const MqlRates &htfRates[], const int htfCount)
+int FindHtfBar(const datetime barTime, const MqlRates &rates[], const int total)
 {
-   int left  = 0;
-   int right = htfCount - 1;
-   int found = -1;
+   if(total <= 0) return -1;
+   if(barTime < rates[0].time) return -1;
+   if(barTime >= rates[total - 1].time) return total - 1;
 
+   int left = 0, right = total - 1, ans = -1;
    while(left <= right)
    {
       int mid = left + (right - left) / 2;
-      if(htfRates[mid].time <= searchTime)
+      if(rates[mid].time <= barTime)
       {
-         found = mid;
-         left  = mid + 1;
+         ans = mid;
+         left = mid + 1;
       }
       else
       {
          right = mid - 1;
       }
    }
-   return found;
+   return ans;
 }
 
 //+------------------------------------------------------------------+
@@ -559,15 +565,17 @@ int OnInit()
       PlotIndexSetInteger(2, PLOT_DRAW_TYPE, DRAW_ARROW);
    }
 
-   //--- Short name
-   string shortName = StringFormat("HMA nrp(%s, %d, speed:%.1f)",
-                                   TimeframeToString((ENUM_TIMEFRAMES)TimeFrame),
-                                   HMAPeriod,
-                                   HMASpeed);
-   IndicatorSetString(INDICATOR_SHORTNAME, shortName);
-   IndicatorSetInteger(INDICATOR_DIGITS, _Digits);
+   //--- Label & ShortName
+   ENUM_TIMEFRAMES currentTf = (ENUM_TIMEFRAMES)_Period;
+   ENUM_TIMEFRAMES targetTf  = (TimeFrame == PERIOD_CURRENT || TimeFrame <= currentTf) ? currentTf : TimeFrame;
+   string shortName = StringFormat("%s HMA(%d)", TimeframeToString(targetTf), HMAPeriod);
 
-   return INIT_SUCCEEDED;
+   IndicatorSetString(INDICATOR_SHORTNAME, shortName);
+   PlotIndexSetString(0, PLOT_LABEL, shortName);
+   PlotIndexSetString(1, PLOT_LABEL, shortName + " Up");
+   PlotIndexSetString(2, PLOT_LABEL, shortName + " Down");
+
+   return(INIT_SUCCEEDED);
 }
 
 //+------------------------------------------------------------------+
@@ -591,6 +599,8 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
+
+
    if(rates_total < 2)
       return 0;
 
@@ -636,6 +646,8 @@ int OnCalculate(const int rates_total,
                DoAlert("sloping down", time[whichBar]);
          }
       }
+
+
 
       return rates_total;
    }
@@ -735,6 +747,19 @@ int OnCalculate(const int rates_total,
             else if(htfTrend[k] == -1.0)
                ArrowDnBuffer[i] = MathMax(HmaBuffer[i], high[i]) + atr[i] * DnArrowGap;
          }
+      }
+   }
+
+   if(alertsOn && rates_total >= 3)
+   {
+      int whichBar = alertsOnCurrent ? (rates_total - 1) : (rates_total - 2);
+      int prevBar  = whichBar - 1;
+      if(whichBar >= 1 && TrendBuffer[whichBar] != TrendBuffer[prevBar])
+      {
+         if(TrendBuffer[whichBar] == 1.0)
+            DoAlert("sloping up", time[whichBar]);
+         else if(TrendBuffer[whichBar] == -1.0)
+            DoAlert("sloping down", time[whichBar]);
       }
    }
 

@@ -90,7 +90,7 @@ input int             Shift           = 0;              // Hull shift
 input int             LinesWidth      = 3;              // Lines width (when lines are displayed)
 
 input group "--- Alert Settings ---"
-input bool            alertsOn        = true;           // Turn alerts on?
+input bool            alertsOn        = false;          // Turn alerts on?
 input bool            alertsOnCurrent = false;          // Alerts on still open bar?
 input bool            alertsMessage   = true;           // Alerts should show popup message?
 input bool            alertsSound     = false;          // Alerts should play a sound?
@@ -275,7 +275,6 @@ void CalculateMa(const double &src[], const int total, const int period, const e
    if(total <= 0)
       return;
 
-   // If dst is dynamic and not sized yet (e.g. maHalf, maFull), resize it
    if(ArraySize(dst) < total)
    {
       ResetLastError();
@@ -284,13 +283,12 @@ void CalculateMa(const double &src[], const int total, const int period, const e
    }
 
    int p = (period < 1) ? 1 : period;
-   int limit = MathMin(total, ArraySize(dst));
 
    switch(mode)
    {
       case ma_sma:
       {
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             double sum = 0.0;
             int count = 0;
@@ -307,7 +305,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       case ma_ema:
       {
          double alpha = 2.0 / (1.0 + (double)p);
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             if(r == 0 || p <= 1)
                dst[r] = src[r];
@@ -319,7 +317,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
 
       case ma_smma:
       {
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             if(r <= 1 || p <= 1)
                dst[r] = src[r];
@@ -333,11 +331,11 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       {
          if(p <= 1)
          {
-            for(int r = 0; r < limit; r++)
+            for(int r = 0; r < total; r++)
                dst[r] = src[r];
             break;
          }
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             double sumw = 0.0;
             double sum  = 0.0;
@@ -356,13 +354,13 @@ void CalculateMa(const double &src[], const int total, const int period, const e
       {
          if(p <= 1)
          {
-            for(int r = 0; r < limit; r++)
+            for(int r = 0; r < total; r++)
                dst[r] = src[r];
             break;
          }
          double alpha = 2.0 / (1.0 + (double)p);
          double tema1 = 0.0, tema2 = 0.0, tema3 = 0.0;
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
          {
             if(r == 0)
             {
@@ -383,7 +381,7 @@ void CalculateMa(const double &src[], const int total, const int period, const e
 
       default:
       {
-         for(int r = 0; r < limit; r++)
+         for(int r = 0; r < total; r++)
             dst[r] = src[r];
          break;
       }
@@ -426,16 +424,13 @@ void CalculateHmaSeries(const double &open[],
    CalculateMa(price, total, halfPeriod, maType, maHalf);
    CalculateMa(price, total, period,     maType, maFull);
 
-   int limitTem = MathMin(total, ArraySize(outTem));
-   for(int r = 0; r < limitTem; r++)
+   for(int r = 0; r < total; r++)
       outTem[r] = 2.0 * maHalf[r] - maFull[r];
 
    CalculateMa(outTem, total, hullPeriod, maType, outHma);
 
-   int limitTrend = MathMin(total, ArraySize(outTrend));
-   int limitHma   = MathMin(total, ArraySize(outHma));
-   if(limitTrend > 0) outTrend[0] = 0.0;
-   for(int r = 1; r < limitTrend && r < limitHma; r++)
+   outTrend[0] = 0.0;
+   for(int r = 1; r < total; r++)
    {
       if(outHma[r] > outHma[r - 1])
          outTrend[r] = 1.0;
@@ -604,6 +599,8 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
+
+
    if(rates_total < 2)
       return 0;
 
@@ -649,6 +646,8 @@ int OnCalculate(const int rates_total,
                DoAlert("sloping down", time[whichBar]);
          }
       }
+
+
 
       return rates_total;
    }
