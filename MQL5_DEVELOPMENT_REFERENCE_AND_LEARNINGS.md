@@ -129,9 +129,10 @@ This document captures the technical lessons, architectural pitfalls, debugging 
 ## 5. Trading Execution & Position Sizing Rules
 
 ### 5.1 Dynamic Equity-Based Lot Sizing
-* Target formula: **$10,000 Equity = 1.0 Lot** (scalable proportionally).
-  $$\text{Lots} = \text{NormalizeLot}\left(\frac{\text{Equity}}{10000.0} \times \text{LotsPer10k}\right)$$
+* Target formula: **$50,000 Equity = 1.0 Lot** (scalable proportionally).
+  $$\text{Lots} = \text{NormalizeLot}\left(\frac{\text{Equity}}{\text{InpEquityPer1Lot}}\right) \quad (\text{Default } \text{InpEquityPer1Lot} = 50,000.0)$$
 * Sized strictly against broker constraints (`SYMBOL_VOLUME_MIN`, `SYMBOL_VOLUME_MAX`, `SYMBOL_VOLUME_STEP`).
+* Example: $22,000 Equity calculates to $22,000 / 50,000 = 0.44$ lots.
 
 ### 5.2 Dollar-Distance Take Profit & Stop Loss (XAU/USD)
 * For Gold ($/oz), point value and tick size must translate cleanly to dollar moves:

@@ -14,9 +14,9 @@
 
 //--- Input Parameters
 input group "=== Position Sizing & Equity Calculation ==="
-input double InpLotsPer10kEquity     = 1.0;            // Lots per $10,000 Equity (e.g. $10k Equity = 1.0 Lot)
+input double InpEquityPer1Lot        = 50000.0;        // Account Equity required per 1.0 Lot (e.g. $50,000 = 1.0 Lot)
 input bool   InpUseAutoLotSizing     = true;           // Auto-calculate lot size based on current equity
-input double InpFixedLotSize         = 1.0;            // Fixed lot size (used if auto sizing is false)
+input double InpFixedLotSize         = 0.20;           // Fixed lot size (used if auto sizing is false)
 
 input group "=== Stop Loss & Take Profit ($ Price Distance) ==="
 input double InpTakeProfitPriceDist  = 5.0;            // Take profit distance in $ (e.g. 5.0 means +$5.00 gold move: Buy at 4100 -> TP 4105)
@@ -128,7 +128,7 @@ double NormalizeLot(double lot)
 
 //+------------------------------------------------------------------+
 //| Calculate Lot Size based on Account Equity                       |
-//| Rule: $10,000 Equity = 1.0 Lot (scalable proportionally)         |
+//| Rule: $50,000 Equity = 1.0 Lot (scalable proportionally)         |
 //+------------------------------------------------------------------+
 double CalculateLotSize()
   {
@@ -142,8 +142,9 @@ double CalculateLotSize()
    if(equity <= 0.0)
       return(SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN));
 
-   // Calculate: (Equity / 10000.0) * InpLotsPer10kEquity
-   double lots = (equity / 10000.0) * InpLotsPer10kEquity;
+   // Calculate: Equity / InpEquityPer1Lot (e.g. $50,000 = 1.0 Lot)
+   double denom = (InpEquityPer1Lot > 0.0) ? InpEquityPer1Lot : 50000.0;
+   double lots = equity / denom;
    return(NormalizeLot(lots));
   }
 
