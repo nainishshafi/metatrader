@@ -1,0 +1,888 @@
+//+------------------------------------------------------------------+
+//|                                                 EA_autotrade.mq5 |
+//|                                        Converted to MQL5 for MT5 |
+//|           Designed for XAU/USD (Gold) with Dynamic Equity Sizing |
+//+------------------------------------------------------------------+
+#property copyright   "Copyright 2026"
+#property link        ""
+#property version     "2.20"
+#property description "EA AutoTrade: Multi-action On-Chart Trading Panel & Automated Trading with HMA NRP for XAU/USD"
+
+//--- Standard Library Includes
+#include <Trade\Trade.mqh>
+#include <Trade\PositionInfo.mqh>
+
+//--- Input Parameters
+input group "=== Position Sizing & Equity Calculation ==="
+input double InpLotsPer10kEquity     = 1.0;            // Lots per $10,000 Equity (e.g. $10k Equity = 1.0 Lot)
+input bool   InpUseAutoLotSizing     = true;           // Auto-calculate lot size based on current equity
+input double InpFixedLotSize         = 1.0;            // Fixed lot size (used if auto sizing is false)
+
+input group "=== Stop Loss & Take Profit ($ Price Distance) ==="
+input double InpTakeProfitPriceDist  = 5.0;            // Take profit distance in $ (e.g. 5.0 means +$5.00 gold move: Buy at 4100 -> TP 4105)
+input double InpStopLossPriceDist    = 0.0;            // Stop loss distance in $ (0.0 = No Stop Loss)
+
+input group "=== HMA NRP Indicator Settings ==="
+input string          InpHMAIndicator        = "HMA nrp";    // Indicator name (in MQL5\Indicators\)
+input ENUM_TIMEFRAMES InpHMATimeFrame        = PERIOD_M15;   // Indicator Timeframe
+input int             InpHMAPeriod           = 21;           // HMA Period
+input bool            InpCloseOnTrendReverse = true;         // Auto-close open position on opposite HMA trend reversal
+input bool            InpAutoTradeOnce       = true;         // Turn off Trade button after opening a trade
+
+input group "=== Magic Numbers & Execution Settings ==="
+input ulong  InpMagicAuto            = 1234;           // Magic Number for Auto Trades
+input ulong  InpMagicManual          = 9999;           // Magic Number for Manual Panel Trades
+input ulong  InpSlippagePoints       = 30;             // Allowed slippage (points)
+
+input group "=== GUI Panel Configuration ==="
+input int    InpButtonX              = 20;             // Panel X coordinate (pixels)
+input int    InpButtonY              = 25;             // Panel Y coordinate (pixels)
+input int    InpButtonWidth          = 85;             // Button width
+input int    InpButtonHeight         = 28;             // Button height
+
+//--- Button Names
+const string BTN_BUY        = "EA_Btn_Buy";
+const string BTN_SELL       = "EA_Btn_Sell";
+const string BTN_CLOSE      = "EA_Btn_Close";
+const string BTN_CLOSE_HALF = "EA_Btn_CloseHalf";
+const string BTN_UPDATE_SL  = "EA_Btn_UpdateSL";
+const string BTN_TRADE      = "EA_Btn_Trade";
+
+//--- Dashboard Element Names
+const string PNL_BG         = "EA_Pnl_BG";
+const string LBL_TITLE      = "EA_Lbl_Title";
+const string LBL_EQUITY     = "EA_Lbl_Equity";
+const string LBL_PRICE      = "EA_Lbl_Price";
+const string LBL_HMA        = "EA_Lbl_HMA";
+const string LBL_TP         = "EA_Lbl_TP";
+const string LBL_SL         = "EA_Lbl_SL";
+const string LBL_STATUS     = "EA_Lbl_Status";
+
+//--- Global Variables
+CTrade         g_trade;
+CPositionInfo  g_position;
+bool           g_isAutoTradeOn   = false;
+int            g_hHMA            = INVALID_HANDLE;
+bool           g_hmaLogged       = false;
+
+//+------------------------------------------------------------------+
+//| Normalize lots according to broker specification                 |
+//+------------------------------------------------------------------+
+double NormalizeLot(double lot)
+  {
+   double step    = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+
+   if(step <= 0.0)    step = 0.01;
+   if(min_lot <= 0.0) min_lot = 0.01;
+   if(max_lot <= 0.0) max_lot = 100.0;
+
+   lot = MathFloor(lot / step) * step;
+   if(lot < min_lot) lot = min_lot;
+   if(lot > max_lot) lot = max_lot;
+
+   int digits = (step >= 0.1) ? 1 : 2;
+   return(NormalizeDouble(lot, digits));
+  }
+
+//+------------------------------------------------------------------+
+//| Calculate Lot Size based on Account Equity                       |
+//| Rule: $10,000 Equity = 1.0 Lot (scalable proportionally)         |
+//+------------------------------------------------------------------+
+double CalculateLotSize()
+  {
+   if(!InpUseAutoLotSizing)
+      return(NormalizeLot(InpFixedLotSize));
+
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   if(equity <= 0.0)
+      equity = AccountInfoDouble(ACCOUNT_BALANCE);
+
+   if(equity <= 0.0)
+      return(SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN));
+
+   // Calculate: (Equity / 10000.0) * InpLotsPer10kEquity
+   double lots = (equity / 10000.0) * InpLotsPer10kEquity;
+   return(NormalizeLot(lots));
+  }
+
+//+------------------------------------------------------------------+
+//| Create a Styled GUI Button                                       |
+//+------------------------------------------------------------------+
+void CreateButton(string name, string text, int x, int y, int width, int height, color bg_color, color text_color)
+  {
+   ObjectDelete(0, name);
+
+   ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, height);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_color);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, text_color);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI Semibold");
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, name, OBJPROP_STATE, false);
+  }
+
+//+------------------------------------------------------------------+
+//| Create a Label inside the Dashboard                              |
+//+------------------------------------------------------------------+
+void CreateLabel(string name, string text, int x, int y, color clr, int font_size = 9, bool is_bold = false)
+  {
+   ObjectDelete(0, name);
+
+   ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetString(0, name, OBJPROP_FONT, is_bold ? "Segoe UI Bold" : "Segoe UI");
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+  }
+
+//+------------------------------------------------------------------+
+//| Create Dashboard Background Panel                                |
+//+------------------------------------------------------------------+
+void CreatePanelBg(string name, int x, int y, int width, int height, color bg_color, color border_color)
+  {
+   ObjectDelete(0, name);
+
+   ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, height);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg_color);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, border_color);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTED, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+  }
+
+//+------------------------------------------------------------------+
+//| Initialize All GUI Elements (Buttons & Dashboard Panel)          |
+//+------------------------------------------------------------------+
+void InitGUI()
+  {
+   int x = InpButtonX;
+   int y = InpButtonY;
+   int w = InpButtonWidth;
+   int h = InpButtonHeight;
+   int gap = 8;
+   int total_width = 3 * w + 2 * gap; // Width across 3 buttons
+
+   // Row 1 Buttons: BUY, SELL, Close All
+   CreateButton(BTN_BUY,   "BUY",       x,                 y, w, h, clrForestGreen,   clrWhite);
+   CreateButton(BTN_SELL,  "SELL",      x + (w + gap),     y, w, h, clrCrimson,       clrWhite);
+   CreateButton(BTN_CLOSE, "Close All", x + 2 * (w + gap), y, w, h, clrDarkSlateGray, clrWhite);
+
+   // Row 2 Buttons: Close Half, Update SL (Breakeven), AutoTrade Toggle
+   int y_row2 = y + h + gap;
+   CreateButton(BTN_CLOSE_HALF, "Close Half", x,                 y_row2, w, h, clrSteelBlue,  clrWhite);
+   CreateButton(BTN_UPDATE_SL,  "Update SL",  x + (w + gap),     y_row2, w, h, clrDarkOrange, clrWhite);
+   CreateButton(BTN_TRADE,      (g_isAutoTradeOn ? "Trade: ON" : "Trade: OFF"),
+                                              x + 2 * (w + gap), y_row2, w, h,
+                                              (g_isAutoTradeOn ? clrGreen : clrRed), clrWhite);
+
+   // Dashboard sits cleanly BELOW the buttons with zero overlap
+   int panel_y = y_row2 + h + 10;
+   int panel_h = 155;
+   CreatePanelBg(PNL_BG, x, panel_y, total_width, panel_h, C'20,24,30', clrDimGray);
+
+   int lbl_x = x + 10;
+   CreateLabel(LBL_TITLE,  "XAU/USD AutoTrade",                   lbl_x, panel_y + 8,   clrGold,        9, true);
+   CreateLabel(LBL_EQUITY, "Equity: $0.00 | Lot: 0.00",           lbl_x, panel_y + 28,  clrPaleGreen,   9, false);
+   CreateLabel(LBL_PRICE,  "Bid: 0.00 | Ask: 0.00",               lbl_x, panel_y + 48,  clrWhite,       9, false);
+   CreateLabel(LBL_HMA,    "HMA Trend: Initializing...",          lbl_x, panel_y + 68,  clrLightGray,   9, false);
+   CreateLabel(LBL_TP,     "Take Profit: +$0.00",                 lbl_x, panel_y + 88,  clrDeepSkyBlue, 9, false);
+   CreateLabel(LBL_SL,     "Stop Loss: NONE",                     lbl_x, panel_y + 108, clrLightGray,   9, false);
+   CreateLabel(LBL_STATUS, "Auto Trade: [ OFF - Standby ]",       lbl_x, panel_y + 128, clrOrangeRed,   9, true);
+
+   Comment(""); // Clear chart comment to prevent any background text collision
+  }
+
+//+------------------------------------------------------------------+
+//| Delete All GUI Elements                                          |
+//+------------------------------------------------------------------+
+void DeleteGUI()
+  {
+   ObjectDelete(0, BTN_BUY);
+   ObjectDelete(0, BTN_SELL);
+   ObjectDelete(0, BTN_CLOSE);
+   ObjectDelete(0, BTN_CLOSE_HALF);
+   ObjectDelete(0, BTN_UPDATE_SL);
+   ObjectDelete(0, BTN_TRADE);
+
+   ObjectDelete(0, PNL_BG);
+   ObjectDelete(0, LBL_TITLE);
+   ObjectDelete(0, LBL_EQUITY);
+   ObjectDelete(0, LBL_PRICE);
+   ObjectDelete(0, LBL_HMA);
+   ObjectDelete(0, LBL_TP);
+   ObjectDelete(0, LBL_SL);
+   ObjectDelete(0, LBL_STATUS);
+
+   Comment("");
+  }
+
+//+------------------------------------------------------------------+
+//| Attempt to create handle for HMA NRP indicator                   |
+//+------------------------------------------------------------------+
+int LoadHMAHandle()
+  {
+   int handle = INVALID_HANDLE;
+
+   // 1. Try direct indicator name with TimeFrame and Period
+   handle = iCustom(_Symbol, InpHMATimeFrame, InpHMAIndicator, InpHMATimeFrame, InpHMAPeriod);
+   if(handle != INVALID_HANDLE)
+      return(handle);
+
+   // 2. Try direct indicator name with default parameters
+   handle = iCustom(_Symbol, InpHMATimeFrame, InpHMAIndicator);
+   if(handle != INVALID_HANDLE)
+      return(handle);
+
+   // 3. Try with Indicators\\ path and parameters
+   handle = iCustom(_Symbol, InpHMATimeFrame, "Indicators\\" + InpHMAIndicator, InpHMATimeFrame, InpHMAPeriod);
+   if(handle != INVALID_HANDLE)
+      return(handle);
+
+   // 4. Try with Indicators\\ path and default parameters
+   handle = iCustom(_Symbol, InpHMATimeFrame, "Indicators\\" + InpHMAIndicator);
+   if(handle != INVALID_HANDLE)
+      return(handle);
+
+   return(INVALID_HANDLE);
+  }
+
+//+------------------------------------------------------------------+
+//| Fetch latest HMA trend direction and price value                 |
+//| Trend: +1.0 = Uptrend (Green), -1.0 = Downtrend (Orange)         |
+//+------------------------------------------------------------------+
+bool GetHMAData(double &trend, double &price)
+  {
+   if(g_hHMA == INVALID_HANDLE)
+      return(false);
+
+   double trend_arr[];
+   double price_arr[];
+   ArraySetAsSeries(trend_arr, true);
+   ArraySetAsSeries(price_arr, true);
+
+   // Buffer 4 is TrendBuffer (+1.0 = Uptrend, -1.0 = Downtrend)
+   int copied_trend = CopyBuffer(g_hHMA, 4, 0, 1, trend_arr);
+   if(copied_trend > 0 && trend_arr[0] != EMPTY_VALUE)
+     {
+      trend = trend_arr[0];
+     }
+   else
+     {
+      // Fallback: Buffer 1 is HmaColorBuffer (0.0 = Uptrend / Green, 1.0 = Downtrend / Orange)
+      double color_arr[];
+      ArraySetAsSeries(color_arr, true);
+      int copied_color = CopyBuffer(g_hHMA, 1, 0, 1, color_arr);
+      if(copied_color > 0 && color_arr[0] != EMPTY_VALUE)
+         trend = (color_arr[0] == 0.0) ? 1.0 : -1.0;
+      else
+         return(false);
+     }
+
+   // Buffer 0 is HmaBuffer (HMA price curve)
+   int copied_price = CopyBuffer(g_hHMA, 0, 0, 1, price_arr);
+   if(copied_price > 0 && price_arr[0] != EMPTY_VALUE && price_arr[0] > 0.0)
+     {
+      price = price_arr[0];
+      return(true);
+     }
+
+   return(false);
+  }
+
+//+------------------------------------------------------------------+
+//| Toggle Auto Trade Button State                                   |
+//+------------------------------------------------------------------+
+void ToggleAutoTradeButton()
+  {
+   g_isAutoTradeOn = !g_isAutoTradeOn;
+
+   // If turning ON and handle is not yet acquired, retry loading
+   if(g_isAutoTradeOn && g_hHMA == INVALID_HANDLE)
+     {
+      g_hHMA = LoadHMAHandle();
+      if(g_hHMA != INVALID_HANDLE)
+         PrintFormat("EA AutoTrade: Attached to HMA indicator '%s' on activation.", InpHMAIndicator);
+     }
+
+   if(g_isAutoTradeOn)
+     {
+      ObjectSetString(0, BTN_TRADE, OBJPROP_TEXT, "Trade: ON");
+      ObjectSetInteger(0, BTN_TRADE, OBJPROP_BGCOLOR, clrGreen);
+     }
+   else
+     {
+      ObjectSetString(0, BTN_TRADE, OBJPROP_TEXT, "Trade: OFF");
+      ObjectSetInteger(0, BTN_TRADE, OBJPROP_BGCOLOR, clrRed);
+     }
+   ObjectSetInteger(0, BTN_TRADE, OBJPROP_STATE, false);
+  }
+
+//+------------------------------------------------------------------+
+//| Check if open trade already exists for this symbol               |
+//+------------------------------------------------------------------+
+bool OpenTradeExist()
+  {
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(g_position.SelectByIndex(i))
+        {
+         if(g_position.Symbol() == _Symbol)
+            return(true);
+        }
+     }
+   return(false);
+  }
+
+//+------------------------------------------------------------------+
+//| Execute BUY Order with Dollar-Based TP & SL                      |
+//+------------------------------------------------------------------+
+bool ExecuteBuy(double lots, ulong magic, string comment = "Buy Order")
+  {
+   g_trade.SetExpertMagicNumber(magic);
+   g_trade.SetDeviationInPoints(InpSlippagePoints);
+
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   if(ask <= 0.0)
+     {
+      Print("ExecuteBuy failed: Ask price is invalid.");
+      return(false);
+     }
+
+   double tp = (InpTakeProfitPriceDist > 0.0) ? NormalizeDouble(ask + InpTakeProfitPriceDist, _Digits) : 0.0;
+   double sl = (InpStopLossPriceDist > 0.0)   ? NormalizeDouble(ask - InpStopLossPriceDist, _Digits)   : 0.0;
+
+   bool res = g_trade.Buy(lots, _Symbol, ask, sl, tp, comment);
+   if(res)
+      PrintFormat("BUY order executed: Lots=%.2f, Price=%.*f, SL=%.*f, TP=%.*f, Magic=%I64u",
+                  lots, _Digits, ask, _Digits, sl, _Digits, tp, magic);
+   else
+      PrintFormat("BUY order error: %s (Code: %u)", g_trade.ResultComment(), g_trade.ResultRetcode());
+
+   return(res);
+  }
+
+//+------------------------------------------------------------------+
+//| Execute SELL Order with Dollar-Based TP & SL                     |
+//+------------------------------------------------------------------+
+bool ExecuteSell(double lots, ulong magic, string comment = "Sell Order")
+  {
+   g_trade.SetExpertMagicNumber(magic);
+   g_trade.SetDeviationInPoints(InpSlippagePoints);
+
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   if(bid <= 0.0)
+     {
+      Print("ExecuteSell failed: Bid price is invalid.");
+      return(false);
+     }
+
+   double tp = (InpTakeProfitPriceDist > 0.0) ? NormalizeDouble(bid - InpTakeProfitPriceDist, _Digits) : 0.0;
+   double sl = (InpStopLossPriceDist > 0.0)   ? NormalizeDouble(bid + InpStopLossPriceDist, _Digits)   : 0.0;
+
+   bool res = g_trade.Sell(lots, _Symbol, bid, sl, tp, comment);
+   if(res)
+      PrintFormat("SELL order executed: Lots=%.2f, Price=%.*f, SL=%.*f, TP=%.*f, Magic=%I64u",
+                  lots, _Digits, bid, _Digits, sl, _Digits, tp, magic);
+   else
+      PrintFormat("SELL order error: %s (Code: %u)", g_trade.ResultComment(), g_trade.ResultRetcode());
+
+   return(res);
+  }
+
+//+------------------------------------------------------------------+
+//| Close all positions on current symbol                            |
+//+------------------------------------------------------------------+
+void CloseAllPositions()
+  {
+   int closed_count = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(g_position.SelectByIndex(i))
+        {
+         if(g_position.Symbol() == _Symbol)
+           {
+            if(g_trade.PositionClose(g_position.Ticket()))
+               closed_count++;
+           }
+        }
+     }
+   PrintFormat("CloseAllPositions: Closed %d position(s) on %s", closed_count, _Symbol);
+  }
+
+//+------------------------------------------------------------------+
+//| Close half of each position on current symbol                    |
+//+------------------------------------------------------------------+
+void CloseHalfPositions()
+  {
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(g_position.SelectByIndex(i))
+        {
+         if(g_position.Symbol() == _Symbol)
+           {
+            double volume = g_position.Volume();
+            double half_vol = NormalizeLot(volume * 0.5);
+            double min_vol  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+
+            if(half_vol >= min_vol && half_vol < volume)
+              {
+               if(g_trade.PositionClosePartial(g_position.Ticket(), half_vol))
+                  PrintFormat("Closed half volume %.2f of position #%I64u", half_vol, g_position.Ticket());
+              }
+           }
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| Move Stop Loss to Breakeven (entry price) for profitable trades  |
+//+------------------------------------------------------------------+
+void UpdateStoplossToBreakeven()
+  {
+   int updated = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(g_position.SelectByIndex(i))
+        {
+         if(g_position.Symbol() == _Symbol)
+           {
+            double open_price = g_position.PriceOpen();
+            double current_sl = g_position.StopLoss();
+            double current_tp = g_position.TakeProfit();
+            double current_price = g_position.PriceCurrent();
+
+            if(g_position.PositionType() == POSITION_TYPE_BUY)
+              {
+               if(current_price > open_price && (current_sl < open_price || current_sl == 0.0))
+                 {
+                  if(g_trade.PositionModify(g_position.Ticket(), open_price, current_tp))
+                     updated++;
+                 }
+              }
+            else if(g_position.PositionType() == POSITION_TYPE_SELL)
+              {
+               if(current_price < open_price && (current_sl > open_price || current_sl == 0.0))
+                 {
+                  if(g_trade.PositionModify(g_position.Ticket(), open_price, current_tp))
+                     updated++;
+                 }
+              }
+           }
+        }
+     }
+   PrintFormat("UpdateStoplossToBreakeven: Updated %d position(s) to breakeven", updated);
+  }
+
+//+------------------------------------------------------------------+
+//| Close trade on opposite HMA trend reversal                       |
+//+------------------------------------------------------------------+
+void CloseTradeOnReversal(double currentTrend, double hmaPrice)
+  {
+   if(!InpCloseOnTrendReverse)
+      return;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      if(g_position.SelectByIndex(i))
+        {
+         if(g_position.Symbol() == _Symbol && g_position.Magic() == InpMagicAuto)
+           {
+            // If BUY trade open, and HMA trend flipped to Bearish (-1.0) and Ask < HMA line
+            if(g_position.PositionType() == POSITION_TYPE_BUY)
+              {
+               double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+               if(currentTrend == -1.0 && ask < hmaPrice)
+                 {
+                  PrintFormat("HMA Reversal Exit: Closing BUY #%I64u (Trend: -1.0, Ask: %.*f < HMA: %.*f)",
+                              g_position.Ticket(), _Digits, ask, _Digits, hmaPrice);
+                  g_trade.PositionClose(g_position.Ticket());
+                 }
+              }
+            // If SELL trade open, and HMA trend flipped to Bullish (+1.0) and Bid > HMA line
+            else if(g_position.PositionType() == POSITION_TYPE_SELL)
+              {
+               double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+               if(currentTrend == 1.0 && bid > hmaPrice)
+                 {
+                  PrintFormat("HMA Reversal Exit: Closing SELL #%I64u (Trend: +1.0, Bid: %.*f > HMA: %.*f)",
+                              g_position.Ticket(), _Digits, bid, _Digits, hmaPrice);
+                  g_trade.PositionClose(g_position.Ticket());
+                 }
+              }
+           }
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| Helper: Check M15 Buy breakout continuation                      |
+//+------------------------------------------------------------------+
+bool CheckPrev15MBuy()
+  {
+   double c1 = iClose(_Symbol, PERIOD_M15, 1);
+   double o1 = iOpen(_Symbol, PERIOD_M15, 1);
+   double h1 = iHigh(_Symbol, PERIOD_M15, 1);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+
+   return(c1 > o1 || bid > h1);
+  }
+
+//+------------------------------------------------------------------+
+//| Helper: Check M15 Sell breakout continuation                     |
+//+------------------------------------------------------------------+
+bool CheckPrev15MSell()
+  {
+   double c1 = iClose(_Symbol, PERIOD_M15, 1);
+   double o1 = iOpen(_Symbol, PERIOD_M15, 1);
+   double l1 = iLow(_Symbol, PERIOD_M15, 1);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+   return(c1 < o1 || ask < l1);
+  }
+
+//+------------------------------------------------------------------+
+//| Helper: Percentage change of Bid from current M15 open           |
+//+------------------------------------------------------------------+
+double GetBidPercentFromOpen()
+  {
+   double open_price = iOpen(_Symbol, PERIOD_M15, 0);
+   if(open_price <= 0.0) return(0.0);
+   double current_bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   return(((current_bid - open_price) / open_price) * 100.0);
+  }
+
+//+------------------------------------------------------------------+
+//| Helper: Percentage change of Ask from current M15 open           |
+//+------------------------------------------------------------------+
+double GetAskPercentFromOpen()
+  {
+   double open_price = iOpen(_Symbol, PERIOD_M15, 0);
+   if(open_price <= 0.0) return(0.0);
+   double current_ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   return(((open_price - current_ask) / open_price) * 100.0);
+  }
+
+//+------------------------------------------------------------------+
+//| Update On-Chart Dashboard Information (Labels below buttons)     |
+//+------------------------------------------------------------------+
+void UpdateDashboard()
+  {
+   double equity   = AccountInfoDouble(ACCOUNT_EQUITY);
+   double calc_lot = CalculateLotSize();
+   double bid      = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask      = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+   // Title line
+   ObjectSetString(0, LBL_TITLE, OBJPROP_TEXT, StringFormat("XAU/USD AutoTrade (%s)", _Symbol));
+
+   // Equity & Lots
+   ObjectSetString(0, LBL_EQUITY, OBJPROP_TEXT,
+      StringFormat("Equity: $%.2f | Lot: %.2f", equity, calc_lot));
+
+   // Live Bid / Ask
+   ObjectSetString(0, LBL_PRICE, OBJPROP_TEXT,
+      StringFormat("Bid: %.*f | Ask: %.*f", _Digits, bid, _Digits, ask));
+
+   // Live HMA NRP Trend Direction
+   double trend = 0.0, hma_p = 0.0;
+   if(GetHMAData(trend, hma_p))
+     {
+      if(trend == 1.0)
+        {
+         ObjectSetString(0, LBL_HMA, OBJPROP_TEXT,
+            StringFormat("HMA (%s,%d): UP / Bullish (%.*f)",
+                         EnumToString(InpHMATimeFrame), InpHMAPeriod, _Digits, hma_p));
+         ObjectSetInteger(0, LBL_HMA, OBJPROP_COLOR, clrLimeGreen);
+        }
+      else if(trend == -1.0)
+        {
+         ObjectSetString(0, LBL_HMA, OBJPROP_TEXT,
+            StringFormat("HMA (%s,%d): DOWN / Bearish (%.*f)",
+                         EnumToString(InpHMATimeFrame), InpHMAPeriod, _Digits, hma_p));
+         ObjectSetInteger(0, LBL_HMA, OBJPROP_COLOR, clrOrange);
+        }
+      else
+        {
+         ObjectSetString(0, LBL_HMA, OBJPROP_TEXT,
+            StringFormat("HMA (%s,%d): Neutral (%.*f)",
+                         EnumToString(InpHMATimeFrame), InpHMAPeriod, _Digits, hma_p));
+         ObjectSetInteger(0, LBL_HMA, OBJPROP_COLOR, clrLightGray);
+        }
+     }
+   else
+     {
+      ObjectSetString(0, LBL_HMA, OBJPROP_TEXT, "HMA NRP: Waiting for Indicator...");
+      ObjectSetInteger(0, LBL_HMA, OBJPROP_COLOR, clrDarkGray);
+     }
+
+   // Take Profit display
+   if(InpTakeProfitPriceDist > 0.0)
+     {
+      double example_tp = (ask > 0.0) ? (ask + InpTakeProfitPriceDist) : 0.0;
+      ObjectSetString(0, LBL_TP, OBJPROP_TEXT,
+         StringFormat("Take Profit: +$%.2f (e.g. TP: %.*f)", InpTakeProfitPriceDist, _Digits, example_tp));
+     }
+   else
+     {
+      ObjectSetString(0, LBL_TP, OBJPROP_TEXT, "Take Profit: NONE");
+     }
+
+   // Stop Loss display
+   if(InpStopLossPriceDist > 0.0)
+     {
+      double example_sl = (ask > 0.0) ? (ask - InpStopLossPriceDist) : 0.0;
+      ObjectSetString(0, LBL_SL, OBJPROP_TEXT,
+         StringFormat("Stop Loss: -$%.2f (e.g. SL: %.*f)", InpStopLossPriceDist, _Digits, example_sl));
+     }
+   else
+     {
+      ObjectSetString(0, LBL_SL, OBJPROP_TEXT, "Stop Loss: NONE (Disabled)");
+     }
+
+   // AutoTrade Status Indicator
+   if(g_isAutoTradeOn)
+     {
+      ObjectSetString(0, LBL_STATUS, OBJPROP_TEXT, "Auto Trade: [ ON - Active ]");
+      ObjectSetInteger(0, LBL_STATUS, OBJPROP_COLOR, clrLime);
+     }
+   else
+     {
+      ObjectSetString(0, LBL_STATUS, OBJPROP_TEXT, "Auto Trade: [ OFF - Standby ]");
+      ObjectSetInteger(0, LBL_STATUS, OBJPROP_COLOR, clrOrangeRed);
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+   // Configure trade client
+   g_trade.SetExpertMagicNumber(InpMagicManual);
+   g_trade.SetDeviationInPoints(InpSlippagePoints);
+
+   // Initialize GUI buttons and Dashboard Panel
+   InitGUI();
+
+   // Load HMA indicator handle
+   g_hHMA = LoadHMAHandle();
+   if(g_hHMA == INVALID_HANDLE && !g_hmaLogged)
+     {
+      PrintFormat("Note: HMA indicator '%s' not loaded yet. Manual panel is 100%% functional; auto-trade signals will wait for indicator.", InpHMAIndicator);
+      g_hmaLogged = true;
+     }
+   else if(g_hHMA != INVALID_HANDLE)
+     {
+      PrintFormat("EA AutoTrade: Successfully attached to HMA indicator '%s' (Handle: %d, TF: %s, Period: %d)",
+                  InpHMAIndicator, g_hHMA, EnumToString(InpHMATimeFrame), InpHMAPeriod);
+     }
+
+   EventSetTimer(1); // 1-second timer for dashboard update
+   UpdateDashboard();
+   ChartRedraw(0);
+
+   PrintFormat("EA AutoTrade initialized successfully. Symbol: %s, Current Equity: $%.2f, Calculated Lot: %.2f",
+               _Symbol, AccountInfoDouble(ACCOUNT_EQUITY), CalculateLotSize());
+   return(INIT_SUCCEEDED);
+  }
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+   EventKillTimer();
+   DeleteGUI();
+
+   if(g_hHMA != INVALID_HANDLE)
+     {
+      IndicatorRelease(g_hHMA);
+      g_hHMA = INVALID_HANDLE;
+     }
+
+   ChartRedraw(0);
+  }
+
+//+------------------------------------------------------------------+
+//| Chart Event Handler for Button Clicks                            |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id,
+                  const long &lparam,
+                  const double &dparam,
+                  const string &sparam)
+  {
+   if(id == CHARTEVENT_OBJECT_CLICK)
+     {
+      if(sparam == BTN_BUY)
+        {
+         ObjectSetInteger(0, BTN_BUY, OBJPROP_STATE, false);
+         double lots = CalculateLotSize();
+         ExecuteBuy(lots, InpMagicManual, "Manual Buy");
+         UpdateDashboard();
+         ChartRedraw(0);
+        }
+      else if(sparam == BTN_SELL)
+        {
+         ObjectSetInteger(0, BTN_SELL, OBJPROP_STATE, false);
+         double lots = CalculateLotSize();
+         ExecuteSell(lots, InpMagicManual, "Manual Sell");
+         UpdateDashboard();
+         ChartRedraw(0);
+        }
+      else if(sparam == BTN_CLOSE)
+        {
+         ObjectSetInteger(0, BTN_CLOSE, OBJPROP_STATE, false);
+         CloseAllPositions();
+         UpdateDashboard();
+         ChartRedraw(0);
+        }
+      else if(sparam == BTN_CLOSE_HALF)
+        {
+         ObjectSetInteger(0, BTN_CLOSE_HALF, OBJPROP_STATE, false);
+         CloseHalfPositions();
+         UpdateDashboard();
+         ChartRedraw(0);
+        }
+      else if(sparam == BTN_UPDATE_SL)
+        {
+         ObjectSetInteger(0, BTN_UPDATE_SL, OBJPROP_STATE, false);
+         UpdateStoplossToBreakeven();
+         UpdateDashboard();
+         ChartRedraw(0);
+        }
+      else if(sparam == BTN_TRADE)
+        {
+         ToggleAutoTradeButton();
+         UpdateDashboard();
+         ChartRedraw(0);
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| Timer Event Handler                                              |
+//+------------------------------------------------------------------+
+void OnTimer()
+  {
+   UpdateDashboard();
+   ChartRedraw(0);
+  }
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+  {
+   UpdateDashboard();
+
+   double currentTrend = 0.0;
+   double hmaPrice     = 0.0;
+   bool   hasHMA       = GetHMAData(currentTrend, hmaPrice);
+
+   // Check and manage reversal exits if auto trades are active
+   if(hasHMA)
+      CloseTradeOnReversal(currentTrend, hmaPrice);
+
+   // Automated trading logic (only when Trade button is ON)
+   if(!g_isAutoTradeOn)
+      return;
+
+   // Require valid indicator data
+   if(!hasHMA)
+      return;
+
+   // Ensure no existing trade is open for this symbol
+   if(OpenTradeExist())
+      return;
+
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   if(bid <= 0.0 || ask <= 0.0)
+      return;
+
+   double o15 = iOpen(_Symbol, PERIOD_M15, 0);
+   double o1  = iOpen(_Symbol, PERIOD_M1, 0);
+   double h15 = iHigh(_Symbol, PERIOD_M15, 0);
+   double l15 = iLow(_Symbol, PERIOD_M15, 0);
+
+   //+---------------------------------------------------------------+
+   //| Auto BUY Condition:                                           |
+   //| 1. HMA Trend Bullish (+1.0) & Bid > HMA curve                 |
+   //| 2. Bid > M15 Bar Open & Bid > M1 Bar Open                     |
+   //| 3. Previous M15 was bullish OR Bid broke above previous high  |
+   //| 4. Bid expanded >= 0.02% from M15 Open                        |
+   //| 5. Bid is at or pressing the M15 candle High                  |
+   //+---------------------------------------------------------------+
+   if(currentTrend == 1.0 && bid > hmaPrice &&
+      bid > o15 && bid > o1 &&
+      CheckPrev15MBuy() &&
+      GetBidPercentFromOpen() > 0.02 &&
+      bid >= (h15 - _Point))
+     {
+      double lots = CalculateLotSize();
+      if(ExecuteBuy(lots, InpMagicAuto, "Auto Buy (HMA)"))
+        {
+         if(InpAutoTradeOnce)
+           {
+            g_isAutoTradeOn = false;
+            ObjectSetString(0, BTN_TRADE, OBJPROP_TEXT, "Trade: OFF");
+            ObjectSetInteger(0, BTN_TRADE, OBJPROP_BGCOLOR, clrRed);
+           }
+         UpdateDashboard();
+         ChartRedraw(0);
+        }
+      return;
+     }
+
+   //+---------------------------------------------------------------+
+   //| Auto SELL Condition:                                          |
+   //| 1. HMA Trend Bearish (-1.0) & Ask < HMA curve                 |
+   //| 2. Ask < M15 Bar Open & Ask < M1 Bar Open                     |
+   //| 3. Previous M15 was bearish OR Ask broke below previous low   |
+   //| 4. Ask dropped >= 0.02% from M15 Open                         |
+   //| 5. Bid is at or pressing the M15 candle Low                   |
+   //+---------------------------------------------------------------+
+   if(currentTrend == -1.0 && ask < hmaPrice &&
+      ask < o15 && ask < o1 &&
+      CheckPrev15MSell() &&
+      GetAskPercentFromOpen() > 0.02 &&
+      bid <= (l15 + _Point))
+     {
+      double lots = CalculateLotSize();
+      if(ExecuteSell(lots, InpMagicAuto, "Auto Sell (HMA)"))
+        {
+         if(InpAutoTradeOnce)
+           {
+            g_isAutoTradeOn = false;
+            ObjectSetString(0, BTN_TRADE, OBJPROP_TEXT, "Trade: OFF");
+            ObjectSetInteger(0, BTN_TRADE, OBJPROP_BGCOLOR, clrRed);
+           }
+         UpdateDashboard();
+         ChartRedraw(0);
+        }
+      return;
+     }
+  }
+//+------------------------------------------------------------------+
