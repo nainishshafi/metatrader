@@ -128,6 +128,7 @@ For in-depth standards, audit rubrics, and technical post-mortems, consult the r
 
 * **[MQL5 Code Writer & Implementation Standard](reference/MQL5_WRITER_GUIDE.md):** Clean coding rules, RAII patterns, hot-path optimization, and two-tier library structuring.
 * **[MQL5 Code Reviewer & Checker Manual](reference/MQL5_CHECKER_GUIDE.md):** 10-point pre-deployment pass/fail checklist, failure mode audits, and headless automated compilation scripts.
+* **[OOP vs. Procedural & Data-Oriented Performance Guide](reference/MQL5_OOP_VS_PROCEDURAL_PERFORMANCE_GUIDE.md):** In-depth CPU hardware, cache line, and VTable analysis of OOP vs Procedural math in quantitative systems.
 * **[Technical Learnings & Post-Mortem Guide](MQL5_DEVELOPMENT_REFERENCE_AND_LEARNINGS.md):** Detailed technical discoveries from past bugs (46s freeze, input group compiler bug, GDI font thrashing).
 
 ---
