@@ -328,6 +328,44 @@ Professional MQL5 codebases enforce a strict two-tier directory separation:
 * If the answer is **Yes**, the framework is properly decoupled.
 * If you find indicator names, button coordinates, or strategy math inside those headers, **the separation is broken**.
 
+### 5.4 Elimination of the "Arrow Anti-Pattern" (Linear Flow via Guard Clauses)
+
+The **Arrow Anti-Pattern** (also known as the *Pyramid of Doom*) occurs when nested `if` statements create a deep rightward-pointing triangle of code. In quantitative systems, this creates fragile, unmaintainable logic where edge cases are easily overlooked.
+
+```
+       ARROW ANTI-PATTERN                       LINEAR GUARD CLAUSES
+         (Deep Pyramid)                           (Flat Control Flow)
+
+for(...) {                                   for(...) {
+   if(select) {                                 if(!select) continue;
+      if(symbol) {                              if(!symbol) continue;
+         if(magic) {                            if(!magic) continue;
+            if(condition) {                     if(!condition) continue;
+               // DO WORK                          // DO WORK
+            }                                }
+         }
+      }
+   }
+}
+```
+
+#### Writing Rules for Linear Flow:
+1. **Invert Checks Immediately:** Instead of wrapping execution blocks inside `if(condition) { ... }`, invert the check and return or continue:
+   ```mql5
+   // BAD: Deeply nested
+   if(pos.SelectByIndex(i)) {
+      if(pos.Symbol() == m_symbol) {
+         if(pos.Magic() == m_magic) { ... }
+      }
+   }
+
+   // GOOD: Linear guards
+   if(!pos.SelectByIndex(i)) continue;
+   if(pos.Symbol() != m_symbol || pos.Magic() != m_magic) continue;
+   ```
+2. **Switch on Enums:** Always use `switch(enumVal)` rather than sequential `else if` statements when dispatching strategy signals or order types.
+3. **Direction Sign Symmetry:** Do not write duplicate branches for `BUY` and `SELL` when setting price offsets. Use a directional multiplier (`double dir = (type == ORDER_TYPE_BUY) ? 1.0 : -1.0;`).
+
 ---
 
 ## 6. High-Performance On-Chart UI & Presentation

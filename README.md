@@ -113,10 +113,11 @@ Trading systems process rapid tick spikes (up to 200 ticks/sec during volatility
 * Calling `CopyBuffer()` on an indicator that has not completed initial bar calculation causes an internal MT5 synchronous freeze of **~46.7 seconds**.
 * `CIndicatorHandle::IsReady()` guards every call with `BarsCalculated(handle) >= 2`.
 
-### 7. Pragmatic Flat Composition (Anti-Over-Engineering)
+### 7. Pragmatic Flat Composition & Zero "Arrow Anti-Pattern"
 * Avoids deep inheritance hierarchies and "abstract factory factories".
 * Maximum 1 level of inheritance (`CHMASignal : public ISignal`).
 * Flat composition through a top-level facade (`CTradingSystem`).
+* Strict enforcement of linear control flow: early `continue`/`return` guard clauses eliminate the "Pyramid of Doom" (nesting depth $\le 2$).
 
 ### 8. Repository Hygiene & Pre-Commit Protection
 * **No Hardcoded Absolute Paths:** Never commit local machine paths (e.g. `C:\<UserDirectory>\...`). Always use relative repository paths or dynamic `$PSScriptRoot`.
@@ -150,7 +151,7 @@ Trading systems process rapid tick spikes (up to 200 ticks/sec during volatility
 For in-depth standards, audit rubrics, and technical post-mortems, consult the reference guides in the `reference/` directory:
 
 * **[MQL5 Code Writer & Implementation Standard](reference/MQL5_WRITER_GUIDE.md):** Clean coding rules, RAII patterns, hot-path optimization, and two-tier library structuring.
-* **[MQL5 Code Reviewer & Checker Manual](reference/MQL5_CHECKER_GUIDE.md):** 10-point pre-deployment pass/fail checklist, failure mode audits, and headless automated compilation scripts.
+* **[MQL5 Code Reviewer & Checker Manual](reference/MQL5_CHECKER_GUIDE.md):** 11-point pre-deployment pass/fail checklist, arrow anti-pattern detection rubric, failure mode audits, and headless automated compilation scripts.
 * **[OOP vs. Procedural & Data-Oriented Performance Guide](reference/MQL5_OOP_VS_PROCEDURAL_PERFORMANCE_GUIDE.md):** In-depth CPU hardware, cache line, and VTable analysis of OOP vs Procedural math in quantitative systems.
 * **[Technical Learnings & Post-Mortem Guide](MQL5_DEVELOPMENT_REFERENCE_AND_LEARNINGS.md):** Detailed technical discoveries from past bugs (46s freeze, input group compiler bug, GDI font thrashing).
 

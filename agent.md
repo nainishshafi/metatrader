@@ -110,13 +110,35 @@ Always delete temporary `compile.log` files after verifying.
 
 ### 4.1 Mandatory Pre-Commit Path & Quality Gate
 Before creating any commit, you **MUST** run the pre-commit audit to ensure no local machine absolute paths or personal identifiers are committed:
-1. **Never use absolute local paths** (e.g. `C:\<UserDirectory>\...`). Always use relative paths (`mt5\indicators\...`) or dynamic path resolution (`$PSScriptRoot`).
+1. **Never use absolute local paths** (e.g. `C:\<UserDirectory>\...`). Always use relative paths (`mt5\indicators\...`) or dynamic path resolution (`$PSScriptRoot`, `$env:APPDATA`).
 2. **Automated Pre-Commit Check**:
    ```powershell
    git diff --cached | Select-String -Pattern "Users[\\/][a-zA-Z0-9_]+|file:///[Cc]:/Users"
    ```
    Must return **0 matches** before proceeding with `git commit`.
 3. An automated pre-commit hook is installed at `.githooks/pre-commit` (and `.git/hooks/pre-commit`, gitignored) to reject any commits containing user paths or personal directories.
+
+### 4.2 Deploying & Synchronizing to MT5 Terminal Data Folder
+When syncing code to the user's active MetaTrader 5 terminal:
+- **Terminal Data Directory**: `$env:APPDATA\MetaQuotes\Terminal\<TerminalID>\MQL5`
+  *(e.g. `Terminal\D990A228E3F37AA81A0D6E6B38F35045\MQL5`)*
+- **Sync Command (PowerShell)**:
+  ```powershell
+  $dest = "$env:APPDATA\MetaQuotes\Terminal\<TerminalID>\MQL5"
+  Copy-Item -Path "mt5\include\*" -Destination "$dest\Include" -Recurse -Force
+  Get-ChildItem -Path "mt5\experts" | Where-Object { $_.Extension -ne ".code-workspace" } | ForEach-Object {
+      Copy-Item -Path $_.FullName -Destination "$dest\Experts" -Recurse -Force
+  }
+  Copy-Item -Path "mt5\indicators\*" -Destination "$dest\Indicators" -Recurse -Force
+  ```
+- **Post-Deploy Compilation**: Always compile `.mq5` files in the destination folder using `metaeditor64.exe` to ensure `.ex5` binaries are freshly generated.
+
+### 4.3 Code Quality Standard: Zero "Arrow Anti-Pattern" (Pyramid of Doom)
+All MQL5 code must strictly eliminate deeply nested conditions:
+1. **Guard Clauses / Inverted Returns**: Replace `if(condition) { ... }` with `if(!condition) return;` or `continue`.
+2. **Linear Loop Iterations**: When iterating positions (`PositionsTotal()`), filter out non-matching symbols and magic numbers at the very top of the loop using `continue`.
+3. **Enum `switch` Over `if-else`**: When evaluating `ENUM_STRATEGY_SIGNAL` or `ENUM_ORDER_TYPE`, always use `switch(val)` instead of multiple `else if` chains.
+4. **Direction Sign Symmetry**: Instead of branching separate nested `if` blocks for `BUY` and `SELL`, use a mathematical direction sign (`double dir = (orderType == ORDER_TYPE_BUY) ? 1.0 : -1.0;`) to calculate SL, TP, and price offsets linearly.
 
 ---
 

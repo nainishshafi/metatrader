@@ -7,14 +7,15 @@
 
 ## Table of Contents
 1. [The Reviewer's Mandate & Audit Philosophy](#1-the-reviewers-mandate--audit-philosophy)
-2. [The 10-Point Pre-Deployment Pass/Fail Checklist](#2-the-10-point-pre-deployment-passfail-checklist)
+2. [The 11-Point Pre-Deployment Pass/Fail Checklist](#2-the-11-point-pre-deployment-passfail-checklist)
 3. [Audit Area 1: Trade Safety & Magic Number Isolation](#3-audit-area-1-trade-safety--magic-number-isolation)
 4. [Audit Area 2: Broker Execution & Constraint Compliance](#4-audit-area-2-broker-execution--constraint-compliance)
 5. [Audit Area 3: Algorithmic Complexity & Hot-Path Latency](#5-audit-area-3-algorithmic-complexity--hot-path-latency)
 6. [Audit Area 4: Indicator Lifecycles & Synchronous Freezes](#6-audit-area-4-indicator-lifecycles--synchronous-freezes)
 7. [Audit Area 5: UI Responsiveness & GDI Throttling](#7-audit-area-5-ui-responsiveness--gdi-throttling)
 8. [Audit Area 6: Over-Engineering & Architectural Bloat](#8-audit-area-6-over-engineering--architectural-bloat)
-9. [Automated Verification & CLI Build Commands](#9-automated-verification--cli-build-commands)
+9. [Audit Area 7: Anti-Pattern Detection — Arrow Anti-Pattern & Deep Nesting](#9-audit-area-7-anti-pattern-detection--arrow-anti-pattern--deep-nesting)
+10. [Automated Verification & CLI Build Commands](#10-automated-verification--cli-build-commands)
 
 ---
 
@@ -29,7 +30,7 @@ Reviewers must enforce **deterministic behavior, zero memory fragmentation, and 
 
 ---
 
-## 2. The 10-Point Pre-Deployment Pass/Fail Checklist
+## 2. The 11-Point Pre-Deployment Pass/Fail Checklist
 
 Every MQL5 Expert Advisor pull request must achieve a 100% pass score on this checklist before being approved for live deployment:
 
@@ -45,6 +46,7 @@ Every MQL5 Expert Advisor pull request must achieve a 100% pass score on this ch
 | **8** | **Delta-Cached Labels** | GUI updates use caching to avoid redundant `ObjectSetString` calls. | Dropped mouse clicks and UI unresponsiveness. | [ ] |
 | **9** | **Indicator Handle Cleanup**| All allocated indicator handles are released in `OnDeinit()` with `IndicatorRelease()`. | Handle memory leaks and background CPU drain. | [ ] |
 | **10**| **No Modal Dialogs** | No modal `Alert()` or blocking message boxes in event handlers. | Freezes MT5 thread until user manual click. | [ ] |
+| **11**| **Zero "Arrow Anti-Pattern"**| Maximum nesting depth $\le 2$; loops use early `continue`/`return` guards; enums use `switch`. | Pyramid of Doom, obscured edge cases, and high cyclomatic complexity. | [ ] |
 
 ---
 
@@ -209,7 +211,120 @@ When reviewing OOP designs in MQL5, watch for "Pattern-itis" that adds cognitive
 
 ---
 
-## 9. Automated Verification & CLI Build Commands
+## 9. Audit Area 7: Anti-Pattern Detection — Arrow Anti-Pattern & Deep Nesting
+
+The **Arrow Anti-Pattern** (also known as the *Pyramid of Doom*) occurs when control flow statements (`if`, `for`, `while`) are nested deeply within each other, creating a rightward-pointing triangle (`>`) of indentation. In high-frequency and quant trading code, deep nesting causes cognitive overload, obscures edge conditions, and creates subtle execution bugs.
+
+### 9.1 Detection Thresholds
+- **Maximum Allowable Nesting Depth:** $\le 2$ levels within any function.
+- **Indentation Warning Threshold:** Any line indented by $\ge 12$ spaces containing `if` is flagged for mandatory refactoring.
+- **Cyclomatic Complexity Limit:** No single function should exceed a cyclomatic complexity of $10$.
+
+### 9.2 The 4-Step Flattening Standard
+
+#### 1. Invert Conditions into Guard Clauses (Early Return / Early Continue)
+Reject nested check pyramids when iterating positions or evaluating events:
+```mql5
+// ❌ REJECT: 4-Level Nested Arrow Pattern
+for(int i = PositionsTotal() - 1; i >= 0; i--) {
+   if(pos.SelectByIndex(i)) {
+      if(pos.Symbol() == m_symbol && pos.Magic() == m_config.magicAuto) {
+         if(m_signals.ShouldReverseExit(pos.PositionType())) {
+            m_positions.CloseTicket(pos.Ticket());
+         }
+      }
+   }
+}
+
+// ✅ APPROVE: Completely Linearized with Early Continue Guards
+for(int i = PositionsTotal() - 1; i >= 0; i--) {
+   if(!pos.SelectByIndex(i)) continue;
+   if(pos.Symbol() != m_symbol || pos.Magic() != m_config.magicAuto) continue;
+   if(!m_signals.ShouldReverseExit(pos.PositionType())) continue;
+
+   PrintFormat("Strategy Reversal Exit: Closing #%I64u on opposite signal", pos.Ticket());
+   m_positions.CloseTicket(pos.Ticket());
+}
+```
+
+#### 2. Reusable Guard Helpers for Complex Iteration
+When multiple methods filter the same entity pool (e.g., matching symbol and magic number across `CloseAll`, `CloseHalf`, `MoveToBreakeven`, and `GetSummary`), encapsulate the check in an inline helper method:
+```mql5
+// Helper in CPositionManager
+bool IsMatchingPosition(const ulong targetMagic = 0) const {
+   return (m_position.Symbol() == m_symbol &&
+          (targetMagic == 0 || m_position.Magic() == targetMagic));
+}
+
+// ✅ APPROVE: Flat, readable execution body
+for(int i = PositionsTotal() - 1; i >= 0; i--) {
+   if(!m_position.SelectByIndex(i) || !IsMatchingPosition(targetMagic))
+      continue;
+
+   if(m_trade.PositionClose(m_position.Ticket()))
+      closed++;
+}
+```
+
+#### 3. Enum `switch` Statements Instead of Long `if-else` Chains
+MQL5 `switch` statements compile into direct jump tables ($O(1)$) and guarantee compiler warnings on unhandled enum variants:
+```mql5
+// ❌ REJECT: Fragile if-else chain on an enum
+ENUM_STRATEGY_SIGNAL signal = m_signals.EvaluateSignal();
+if(signal == STRATEGY_SIGNAL_BUY) { ... }
+else if(signal == STRATEGY_SIGNAL_SELL) { ... }
+
+// ✅ APPROVE: Fast, explicit jump-table dispatch
+switch(signal) {
+   case STRATEGY_SIGNAL_BUY:
+      tradeExecuted = m_positions.ExecuteBuy(lots, ...);
+      break;
+   case STRATEGY_SIGNAL_SELL:
+      tradeExecuted = m_positions.ExecuteSell(lots, ...);
+      break;
+   default:
+      break;
+}
+```
+
+#### 4. Direction Sign Symmetry (Mathematical Flattening)
+Avoid duplicating identical calculation blocks for `BUY` and `SELL` by factoring out the mathematical sign multiplier:
+```mql5
+// ❌ REJECT: 30+ lines of duplicated branching for BUY and SELL stops
+if(orderType == ORDER_TYPE_BUY) {
+   if(slDistance > 0.0) { double rawSl = openPrice - slDistance; ... }
+   if(tpDistance > 0.0) { double rawTp = openPrice + tpDistance; ... }
+} else if(orderType == ORDER_TYPE_SELL) {
+   if(slDistance > 0.0) { double rawSl = openPrice + slDistance; ... }
+   if(tpDistance > 0.0) { double rawTp = openPrice - tpDistance; ... }
+}
+
+// ✅ APPROVE: Branchless direction vectorization
+double dir = (orderType == ORDER_TYPE_BUY) ? 1.0 : -1.0;
+if(slDistance > 0.0)
+   sl = NormalizeDouble(openPrice - dir * MathMax(slDistance, minAllowed), digits);
+if(tpDistance > 0.0)
+   tp = NormalizeDouble(openPrice + dir * MathMax(tpDistance, minAllowed), digits);
+```
+
+### 9.3 Automated Arrow Anti-Pattern Scanner (PowerShell)
+Reviewers can audit any pull request or repository for arrow anti-patterns with this one-liner:
+```powershell
+Get-ChildItem -Path mt5 -Recurse -Include *.mq5,*.mqh | ForEach-Object {
+    $lines = Get-Content $_.FullName
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $trimmed = $lines[$i].TrimStart()
+        $indent = $lines[$i].Length - $trimmed.Length
+        if ($indent -ge 12 -and ($trimmed.StartsWith("if(") -or $trimmed.StartsWith("if ("))) {
+            Write-Host "$($_.FullName):$($i+1) (Indent: $indent) -> $trimmed" -ForegroundColor Yellow
+        }
+    }
+}
+```
+
+---
+
+## 10. Automated Verification & CLI Build Commands
 
 Always verify that the code compiles with **0 errors and 0 warnings** using the headless MetaEditor 64-bit compiler.
 
