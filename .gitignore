@@ -2,4 +2,5 @@
 *.ex5
 *.log
 .vscode/
+*.code-workspace
 
