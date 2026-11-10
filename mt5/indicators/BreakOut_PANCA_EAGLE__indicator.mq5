@@ -16,19 +16,19 @@
 #property indicator_plots   0
 
 //--- Input parameters
-input group             "--- Session Time Settings ---"
+//--- Session Time Settings ---
 input int               NumberOfDays        = 50;           // Number of days to display
 input string            periodBegin         = "00:00";      // Session start time (HH:MM)
 input string            periodEnd           = "05:30";      // Session end time (HH:MM)
 input string            BoxEnd              = "23:00";      // Breakout box end time (HH:MM)
 input int               BoxBreakOut_Offset  = 10;           // Breakout offset (in points)
 
-input group             "--- Box Colors ---"
+//--- Box Colors ---
 input color             BoxHLColor          = clrNONE;      // High-Low Box Color (clrNONE = none)
 input color             BoxBreakOutColor    = clrLimeGreen; // Breakout Boxes Color
 input color             BoxPeriodColor      = clrOrangeRed; // Period Border Box Color
 
-input group             "--- Performance Settings ---"
+//--- Performance Settings ---
 input bool              InpUpdateOnNewBar   = true;         // Update on new bar only (false = every tick)
 
 //--- Constants

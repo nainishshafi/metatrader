@@ -603,6 +603,7 @@ int OnInit()
    string shortName = StringFormat("%s HMA(%d)", TimeframeToString(targetTf), HMAPeriod);
 
    IndicatorSetString(INDICATOR_SHORTNAME, shortName);
+   IndicatorSetInteger(INDICATOR_DIGITS, _Digits);
    PlotIndexSetString(0, PLOT_LABEL, shortName);
    PlotIndexSetString(1, PLOT_LABEL, shortName + " Up");
    PlotIndexSetString(2, PLOT_LABEL, shortName + " Down");

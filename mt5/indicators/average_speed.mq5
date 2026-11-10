@@ -32,7 +32,7 @@
 #property indicator_levelstyle STYLE_DASHDOTDOT
 
 //--- Input parameters
-input group             "--- Average Speed Settings ---"
+//--- Average Speed Settings ---
 input int                InpPeriod       = 5;              // Averaging Period (bars)
 input ENUM_APPLIED_PRICE InpAppliedPrice = PRICE_WEIGHTED; // Applied Price
 

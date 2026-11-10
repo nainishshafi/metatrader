@@ -302,6 +302,17 @@ void CleanupOldObjects(datetime oldest_time)
       string name = ObjectName(0, i, 0, -1);
       if(StringFind(name, g_prefix) == 0)
       {
+         int last_underscore = StringFind(name, "_", StringLen(g_prefix));
+         if(last_underscore >= 0)
+         {
+            string time_str = StringSubstr(name, last_underscore + 1);
+            datetime bar_time = (datetime)StringToInteger(time_str);
+            if(bar_time > 0 && bar_time < oldest_time)
+            {
+               ObjectDelete(0, name);
+               continue;
+            }
+         }
          datetime obj_time = (datetime)ObjectGetInteger(0, name, OBJPROP_TIME, 0);
          if(obj_time > 0 && obj_time < oldest_time)
          {
@@ -388,6 +399,7 @@ int OnCalculate(const int rates_total,
       g_history_drawn     = true;
 
       UpdateComment(htf_rates[0]);
+      ChartRedraw(0);
       return(rates_total);
    }
 

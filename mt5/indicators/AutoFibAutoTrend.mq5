@@ -13,27 +13,27 @@
 #property indicator_plots   0
 
 //--- Inputs
-input group             "--- General Settings ---"
+//--- General Settings ---
 input ENUM_TIMEFRAMES   InpPeriod           = PERIOD_CURRENT;    // Timeframe
 input bool              InpUpdateOnNewBar   = true;              // Update only on new bar (false = every tick)
 
-input group             "--- ZigZag Settings ---"
+//--- ZigZag Settings ---
 input int               InpDepth            = 12;                // ZigZag Depth
 input int               InpDeviation        = 5;                 // ZigZag Deviation
 input int               InpBackstep         = 3;                 // ZigZag Backstep
 input string            InpZigZagPath       = "Examples\\ZigZag";// ZigZag indicator path
 
-input group             "--- Fibonacci Retracement ---"
+//--- Fibonacci Retracement ---
 input bool              ShowFib             = true;              // Show Fibonacci Retracement
 input color             FibColor            = clrRed;            // Fibonacci Color
 input int               FibSize             = 1;                 // Fibonacci Width
 
-input group             "--- Fibonacci Fan ---"
+//--- Fibonacci Fan ---
 input bool              ShowFibFan          = false;             // Show Fibonacci Fan
 input color             FibFanColor         = clrAqua;           // Fibonacci Fan Color
 input int               FibFanSize          = 1;                 // Fibonacci Fan Width
 
-input group             "--- Trend Channel ---"
+//--- Trend Channel ---
 input bool              ShowTrend           = true;              // Show Trend Channel
 input color             TrendColor          = clrBlack;          // Trend Channel Color
 input int               TrendSize           = 2;                 // Trend Channel Width
@@ -92,6 +92,9 @@ int OnInit()
       Print("AutoFibAutoTrend: External ZigZag indicator not found. Built-in ZigZag engine will be used.");
      }
 
+   IndicatorSetString(INDICATOR_SHORTNAME, StringFormat("AutoFibAutoTrend(%s)", EnumToString(tf)));
+   IndicatorSetInteger(INDICATOR_DIGITS, _Digits);
+
    return(INIT_SUCCEEDED);
   }
 
@@ -117,7 +120,8 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 int GetSwingsFromIndicator(int handle, ENUM_TIMEFRAMES tf, double &values[], datetime &times[])
   {
-   if(handle == INVALID_HANDLE)
+   // Guard against the 46.7-second MT5 thread-lock timeout
+   if(handle == INVALID_HANDLE || BarsCalculated(handle) < 2)
       return(0);
 
    int available = iBars(_Symbol, tf);
@@ -376,6 +380,11 @@ void UpdateTrendChannel(datetime t1, double p1, datetime t2, double p2, datetime
    ObjectSetInteger(0, g_trend, OBJPROP_WIDTH, TrendSize);
    ObjectSetInteger(0, g_trend, OBJPROP_STYLE, STYLE_SOLID);
    ObjectSetInteger(0, g_trend, OBJPROP_RAY_RIGHT, true);
+   ObjectSetInteger(0, g_trend, OBJPROP_BACK, true);
+   ObjectSetInteger(0, g_trend, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, g_trend, OBJPROP_SELECTED, false);
+   ObjectSetInteger(0, g_trend, OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, g_trend, OBJPROP_ZORDER, 0);
   }
 
 //+------------------------------------------------------------------+
@@ -402,6 +411,11 @@ void UpdateFibonacci(datetime t1, double p1, datetime t2, double p2)
    ObjectSetInteger(0, g_fib1, OBJPROP_COLOR, FibColor);
    ObjectSetInteger(0, g_fib1, OBJPROP_WIDTH, FibSize);
    ObjectSetInteger(0, g_fib1, OBJPROP_RAY_RIGHT, true);
+   ObjectSetInteger(0, g_fib1, OBJPROP_BACK, true);
+   ObjectSetInteger(0, g_fib1, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, g_fib1, OBJPROP_SELECTED, false);
+   ObjectSetInteger(0, g_fib1, OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, g_fib1, OBJPROP_ZORDER, 0);
 
    int levels = (int)ObjectGetInteger(0, g_fib1, OBJPROP_LEVELS);
    for(int i = 0; i < levels; i++)
@@ -434,6 +448,11 @@ void UpdateFibonacciFan(datetime t1, double p1, datetime t2, double p2)
 
    ObjectSetInteger(0, g_fibf1, OBJPROP_COLOR, FibFanColor);
    ObjectSetInteger(0, g_fibf1, OBJPROP_WIDTH, FibFanSize);
+   ObjectSetInteger(0, g_fibf1, OBJPROP_BACK, true);
+   ObjectSetInteger(0, g_fibf1, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, g_fibf1, OBJPROP_SELECTED, false);
+   ObjectSetInteger(0, g_fibf1, OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, g_fibf1, OBJPROP_ZORDER, 0);
 
    int levels = (int)ObjectGetInteger(0, g_fibf1, OBJPROP_LEVELS);
    for(int i = 0; i < levels; i++)
