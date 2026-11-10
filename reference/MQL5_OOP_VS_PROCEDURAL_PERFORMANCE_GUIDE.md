@@ -265,3 +265,4 @@ When authoring or reviewing MQL5 trading code, follow these five golden rules:
 
 5. **Encapsulate Broker State in Dedicated Managers:**  
    Keep `CTrade`, order tickets, and magic numbers isolated inside `CPositionManager`. Never leave naked `CTrade` instances as global variables in the main script.
+
