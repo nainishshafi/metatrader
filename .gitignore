@@ -3,4 +3,5 @@
 *.log
 .vscode/
 *.code-workspace
+.githooks/
 

@@ -120,7 +120,7 @@ Trading systems process rapid tick spikes (up to 200 ticks/sec during volatility
 
 ### 8. Repository Hygiene & Pre-Commit Protection
 * **No Hardcoded Absolute Paths:** Never commit local machine paths (e.g. `C:\<UserDirectory>\...`). Always use relative repository paths or dynamic `$PSScriptRoot`.
-* **Automated Pre-Commit Guard:** Enforced via local `.git/hooks/pre-commit` to block any commits containing sensitive local machine paths or usernames.
+* **Automated Pre-Commit Guard:** The repository includes a pre-commit quality hook in `.githooks/pre-commit` (gitignored, configured via `core.hooksPath`) to block commits containing sensitive local paths or usernames.
 
 ---
 

@@ -116,7 +116,7 @@ Before creating any commit, you **MUST** run the pre-commit audit to ensure no l
    git diff --cached | Select-String -Pattern "Users[\\/][a-zA-Z0-9_]+|file:///[Cc]:/Users"
    ```
    Must return **0 matches** before proceeding with `git commit`.
-3. A local pre-commit hook is installed at `.git/hooks/pre-commit` to reject any commits containing user paths or personal directories.
+3. An automated pre-commit hook is installed at `.githooks/pre-commit` (and `.git/hooks/pre-commit`, gitignored) to reject any commits containing user paths or personal directories.
 
 ---
 
