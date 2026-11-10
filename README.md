@@ -26,9 +26,9 @@ The project combines an interactive on-chart dashboard with an automated trend-f
 
 ---
 
-## 🏛️ Two-Tier Architecture
+## 🏛️ Two-Tier Architecture & Hybrid Quant Design
 
-To avoid monolithic script sprawl and enable cross-project reuse, the codebase follows a **Two-Tier Architecture**:
+To avoid monolithic script sprawl and eliminate runtime latency bottlenecks, the codebase follows a **Two-Tier Architecture** and a **Hybrid Quant Design** (Procedural math on the hot path; Flat OOP for infrastructure):
 
 ```
 mt5/
@@ -44,17 +44,36 @@ mt5/
 │   └── Strategy/
 │       └── ISignal.mqh               <-- Generic strategy signal interface
 │
-└── experts/                          <-- TIER 2: EA-Specific Implementation
-    ├── EA_autotrade.mq5              <-- Lean entry point (< 100 lines)
-    └── include/AutoTrade/
-        ├── Defines.mqh               <-- AutoTrade button IDs & configuration structs
-        ├── HMASignal.mqh             <-- HMA NRP + M15 breakout strategy (implements ISignal)
-        ├── DashboardPanel.mqh        <-- XAU/USD dashboard layout (uses ChartGUI)
-        └── TradingSystem.mqh         <-- High-level Facade coordinating subsystems
+├── experts/                          <-- TIER 2: EA-Specific Implementation
+│   ├── EA_autotrade.mq5              <-- Lean entry point (< 100 lines)
+│   └── include/AutoTrade/
+│       ├── Defines.mqh               <-- AutoTrade button IDs & configuration structs
+│       ├── HMASignal.mqh             <-- HMA NRP + M15 breakout strategy (implements ISignal)
+│       ├── DashboardPanel.mqh        <-- XAU/USD dashboard layout (uses ChartGUI)
+│       └── TradingSystem.mqh         <-- High-level Facade coordinating subsystems
+│
+└── indicators/                       <-- High-Performance Technical Indicators
+    ├── AutoFibAutoTrend.mq5          <-- Auto Fibonacci & trend channel (no input group, 46s guard)
+    ├── average_speed.mq5             <-- Price velocity in points/minute (clean parameter binding)
+    ├── BreakOut_PANCA_EAGLE.mq5      <-- Session breakout indicator with non-overlapping boxes
+    ├── CustomCandle.mq5              <-- Higher-timeframe candle renderer with name-based cleanup
+    └── HMA nrp.mq5                   <-- Multi-timeframe Hull Moving Average (O(1) incremental)
 ```
 
 * **Tier 1 (Generic Framework):** Reusable across *any* future Expert Advisor, indicator, or strategy with zero modifications.
-* **Tier 2 (Domain Implementation):** Implements the specific rules, parameters, and HUD layout for `EA_autotrade`.
+* **Tier 2 (Domain Implementation):** Implements the specific trading rules, parameter inputs, and HUD layout for `EA_autotrade`.
+
+---
+
+## 📊 Technical Indicators Included
+
+| Indicator | Purpose | Optimization Highlights |
+| :--- | :--- | :--- |
+| **HMA nrp** | Non-repainting Hull Moving Average with multi-timeframe interpolation. | Incremental $O(1)$ calculation via `prev_calculated`, pre-allocated capacity buffers, binary search for HTF bars. |
+| **CustomCandle** | Renders higher-timeframe candles (e.g. H1 on M15) on lower-timeframe charts. | Skip-drawing closed historical bars, name-based deterministic cleanup, and unselectable background z-order. |
+| **AutoFibAutoTrend** | Automatic Fibonacci Retracement, Fibonacci Fan, and Equidistant Trend Channel. | Removed `input group` parameter shift bug, added `BarsCalculated(h) >= 2` freeze guard, and set unselectable z-order. |
+| **average_speed** | Calculates price movement speed in points/minute. | Cleaned up parameters for seamless `iCustom()` programmatic calls and zero-divide safeguards on point/time. |
+| **BreakOut PANCA EAGLE** | Session breakout indicator drawing Asian/London/NY range boxes. | Cleaned up parameter slots and unselectable background layer properties. |
 
 ---
 
@@ -135,4 +154,3 @@ For in-depth standards, audit rubrics, and technical post-mortems, consult the r
 
 ## 📄 License
 This project is licensed under the MIT License - see the repository for details.
-
