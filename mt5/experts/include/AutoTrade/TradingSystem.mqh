@@ -81,17 +81,15 @@ private:
       CPositionInfo pos;
       for(int i = PositionsTotal() - 1; i >= 0; i--)
       {
-         if(pos.SelectByIndex(i))
-         {
-            if(pos.Symbol() == m_symbol && pos.Magic() == m_config.magicAuto)
-            {
-               if(m_signals.ShouldReverseExit(pos.PositionType()))
-               {
-                  PrintFormat("Strategy Reversal Exit: Closing #%I64u on opposite signal", pos.Ticket());
-                  m_positions.CloseTicket(pos.Ticket());
-               }
-            }
-         }
+         if(!pos.SelectByIndex(i))
+            continue;
+         if(pos.Symbol() != m_symbol || pos.Magic() != m_config.magicAuto)
+            continue;
+         if(!m_signals.ShouldReverseExit(pos.PositionType()))
+            continue;
+
+         PrintFormat("Strategy Reversal Exit: Closing #%I64u on opposite signal", pos.Ticket());
+         m_positions.CloseTicket(pos.Ticket());
       }
    }
 
@@ -143,53 +141,34 @@ public:
       if(id != CHARTEVENT_OBJECT_CLICK)
          return;
 
-      if(sparam == BTN_BUY)
-      {
-         m_dashboard.ResetButtonState(BTN_BUY);
-         ChartRedraw(0);
-         if(!CheckAlgoTradingAllowed()) return;
-         double lots = CSymbolHelper::CalculateLotFromEquity(m_symbol, m_config.useAutoLotSizing, m_config.fixedLotSize, m_config.equityPer1Lot);
-         m_positions.ExecuteBuy(lots, m_config.magicManual, m_config.stopLossPriceDist, m_config.takeProfitPriceDist, "Manual Buy");
-         RefreshDashboard(true);
-      }
-      else if(sparam == BTN_SELL)
-      {
-         m_dashboard.ResetButtonState(BTN_SELL);
-         ChartRedraw(0);
-         if(!CheckAlgoTradingAllowed()) return;
-         double lots = CSymbolHelper::CalculateLotFromEquity(m_symbol, m_config.useAutoLotSizing, m_config.fixedLotSize, m_config.equityPer1Lot);
-         m_positions.ExecuteSell(lots, m_config.magicManual, m_config.stopLossPriceDist, m_config.takeProfitPriceDist, "Manual Sell");
-         RefreshDashboard(true);
-      }
-      else if(sparam == BTN_CLOSE)
-      {
-         m_dashboard.ResetButtonState(BTN_CLOSE);
-         ChartRedraw(0);
-         if(!CheckAlgoTradingAllowed()) return;
-         m_positions.CloseAll(0); // 0 = closes all on symbol
-         RefreshDashboard(true);
-      }
-      else if(sparam == BTN_CLOSE_HALF)
-      {
-         m_dashboard.ResetButtonState(BTN_CLOSE_HALF);
-         ChartRedraw(0);
-         if(!CheckAlgoTradingAllowed()) return;
-         m_positions.CloseHalf(0);
-         RefreshDashboard(true);
-      }
-      else if(sparam == BTN_UPDATE_SL)
-      {
-         m_dashboard.ResetButtonState(BTN_UPDATE_SL);
-         ChartRedraw(0);
-         if(!CheckAlgoTradingAllowed()) return;
-         m_positions.MoveToBreakeven(0);
-         RefreshDashboard(true);
-      }
-      else if(sparam == BTN_TRADE)
+      if(sparam == BTN_TRADE)
       {
          ToggleAutoTrade();
          RefreshDashboard(true);
+         return;
       }
+
+      // Remaining button actions require trading permission
+      m_dashboard.ResetButtonState(sparam);
+      ChartRedraw(0);
+
+      if(!CheckAlgoTradingAllowed())
+         return;
+
+      double lots = CSymbolHelper::CalculateLotFromEquity(m_symbol, m_config.useAutoLotSizing, m_config.fixedLotSize, m_config.equityPer1Lot);
+
+      if(sparam == BTN_BUY)
+         m_positions.ExecuteBuy(lots, m_config.magicManual, m_config.stopLossPriceDist, m_config.takeProfitPriceDist, "Manual Buy");
+      else if(sparam == BTN_SELL)
+         m_positions.ExecuteSell(lots, m_config.magicManual, m_config.stopLossPriceDist, m_config.takeProfitPriceDist, "Manual Sell");
+      else if(sparam == BTN_CLOSE)
+         m_positions.CloseAll(0);
+      else if(sparam == BTN_CLOSE_HALF)
+         m_positions.CloseHalf(0);
+      else if(sparam == BTN_UPDATE_SL)
+         m_positions.MoveToBreakeven(0);
+
+      RefreshDashboard(true);
    }
 
    void OnTick()
@@ -213,32 +192,34 @@ public:
          return;
 
       ENUM_STRATEGY_SIGNAL signal = m_signals.EvaluateSignal();
+      if(signal == STRATEGY_SIGNAL_NONE)
+         return;
 
-      if(signal == STRATEGY_SIGNAL_BUY)
+      double lots = CSymbolHelper::CalculateLotFromEquity(m_symbol, m_config.useAutoLotSizing, m_config.fixedLotSize, m_config.equityPer1Lot);
+      bool tradeExecuted = false;
+
+      switch(signal)
       {
-         double lots = CSymbolHelper::CalculateLotFromEquity(m_symbol, m_config.useAutoLotSizing, m_config.fixedLotSize, m_config.equityPer1Lot);
-         if(m_positions.ExecuteBuy(lots, m_config.magicAuto, m_config.stopLossPriceDist, m_config.takeProfitPriceDist, "Auto Buy (HMA)"))
-         {
-            if(m_config.autoTradeOnce)
-            {
-               m_isAutoTradeOn = false;
-               m_dashboard.SetTradeButtonState(false);
-            }
-            RefreshDashboard(true);
-         }
+         case STRATEGY_SIGNAL_BUY:
+            tradeExecuted = m_positions.ExecuteBuy(lots, m_config.magicAuto, m_config.stopLossPriceDist, m_config.takeProfitPriceDist, "Auto Buy (HMA)");
+            break;
+
+         case STRATEGY_SIGNAL_SELL:
+            tradeExecuted = m_positions.ExecuteSell(lots, m_config.magicAuto, m_config.stopLossPriceDist, m_config.takeProfitPriceDist, "Auto Sell (HMA)");
+            break;
+
+         default:
+            break;
       }
-      else if(signal == STRATEGY_SIGNAL_SELL)
+
+      if(!tradeExecuted)
+         return;
+
+      if(m_config.autoTradeOnce)
       {
-         double lots = CSymbolHelper::CalculateLotFromEquity(m_symbol, m_config.useAutoLotSizing, m_config.fixedLotSize, m_config.equityPer1Lot);
-         if(m_positions.ExecuteSell(lots, m_config.magicAuto, m_config.stopLossPriceDist, m_config.takeProfitPriceDist, "Auto Sell (HMA)"))
-         {
-            if(m_config.autoTradeOnce)
-            {
-               m_isAutoTradeOn = false;
-               m_dashboard.SetTradeButtonState(false);
-            }
-            RefreshDashboard(true);
-         }
+         m_isAutoTradeOn = false;
+         m_dashboard.SetTradeButtonState(false);
       }
+      RefreshDashboard(true);
    }
 };

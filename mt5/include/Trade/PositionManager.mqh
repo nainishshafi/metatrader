@@ -18,6 +18,15 @@ protected:
    string         m_symbol;
    ulong          m_slippage;
 
+   //+---------------------------------------------------------------+
+   //| Fast Guard: Match Symbol & Magic Number Isolation             |
+   //+---------------------------------------------------------------+
+   bool IsMatchingPosition(const ulong targetMagic = 0) const
+   {
+      return (m_position.Symbol() == m_symbol &&
+             (targetMagic == 0 || m_position.Magic() == targetMagic));
+   }
+
 public:
    CPositionManager() : m_symbol(""), m_slippage(30) {}
 
@@ -103,17 +112,11 @@ public:
       int closed = 0;
       for(int i = PositionsTotal() - 1; i >= 0; i--)
       {
-         if(m_position.SelectByIndex(i))
-         {
-            if(m_position.Symbol() == m_symbol)
-            {
-               if(targetMagic == 0 || m_position.Magic() == targetMagic)
-               {
-                  if(m_trade.PositionClose(m_position.Ticket()))
-                     closed++;
-               }
-            }
-         }
+         if(!m_position.SelectByIndex(i) || !IsMatchingPosition(targetMagic))
+            continue;
+
+         if(m_trade.PositionClose(m_position.Ticket()))
+            closed++;
       }
       PrintFormat("CloseAll: Closed %d position(s) on %s (Magic: %I64u)", closed, m_symbol, targetMagic);
       return closed;
@@ -127,26 +130,20 @@ public:
       int closed = 0;
       for(int i = PositionsTotal() - 1; i >= 0; i--)
       {
-         if(m_position.SelectByIndex(i))
-         {
-            if(m_position.Symbol() == m_symbol)
-            {
-               if(targetMagic == 0 || m_position.Magic() == targetMagic)
-               {
-                  double volume   = m_position.Volume();
-                  double half_vol = CSymbolHelper::NormalizeLot(m_symbol, volume * 0.5);
-                  double min_vol  = SymbolInfoDouble(m_symbol, SYMBOL_VOLUME_MIN);
+         if(!m_position.SelectByIndex(i) || !IsMatchingPosition(targetMagic))
+            continue;
 
-                  if(half_vol >= min_vol && half_vol < volume)
-                  {
-                     if(m_trade.PositionClosePartial(m_position.Ticket(), half_vol))
-                     {
-                        PrintFormat("Closed half volume %.2f of position #%I64u", half_vol, m_position.Ticket());
-                        closed++;
-                     }
-                  }
-               }
-            }
+         double volume   = m_position.Volume();
+         double half_vol = CSymbolHelper::NormalizeLot(m_symbol, volume * 0.5);
+         double min_vol  = SymbolInfoDouble(m_symbol, SYMBOL_VOLUME_MIN);
+
+         if(half_vol < min_vol || half_vol >= volume)
+            continue;
+
+         if(m_trade.PositionClosePartial(m_position.Ticket(), half_vol))
+         {
+            PrintFormat("Closed half volume %.2f of position #%I64u", half_vol, m_position.Ticket());
+            closed++;
          }
       }
       return closed;
@@ -160,36 +157,24 @@ public:
       int updated = 0;
       for(int i = PositionsTotal() - 1; i >= 0; i--)
       {
-         if(m_position.SelectByIndex(i))
-         {
-            if(m_position.Symbol() == m_symbol)
-            {
-               if(targetMagic == 0 || m_position.Magic() == targetMagic)
-               {
-                  double open_price    = m_position.PriceOpen();
-                  double current_sl    = m_position.StopLoss();
-                  double current_tp    = m_position.TakeProfit();
-                  double current_price = m_position.PriceCurrent();
+         if(!m_position.SelectByIndex(i) || !IsMatchingPosition(targetMagic))
+            continue;
 
-                  if(m_position.PositionType() == POSITION_TYPE_BUY)
-                  {
-                     if(current_price > open_price && (current_sl < open_price || current_sl == 0.0))
-                     {
-                        if(m_trade.PositionModify(m_position.Ticket(), open_price, current_tp))
-                           updated++;
-                     }
-                  }
-                  else if(m_position.PositionType() == POSITION_TYPE_SELL)
-                  {
-                     if(current_price < open_price && (current_sl > open_price || current_sl == 0.0))
-                     {
-                        if(m_trade.PositionModify(m_position.Ticket(), open_price, current_tp))
-                           updated++;
-                     }
-                  }
-               }
-            }
-         }
+         double open_price    = m_position.PriceOpen();
+         double current_sl    = m_position.StopLoss();
+         double current_tp    = m_position.TakeProfit();
+         double current_price = m_position.PriceCurrent();
+         ENUM_POSITION_TYPE type = m_position.PositionType();
+
+         bool isProfitable = (type == POSITION_TYPE_BUY)
+                             ? (current_price > open_price && (current_sl < open_price || current_sl == 0.0))
+                             : (current_price < open_price && (current_sl > open_price || current_sl == 0.0));
+
+         if(!isProfitable)
+            continue;
+
+         if(m_trade.PositionModify(m_position.Ticket(), open_price, current_tp))
+            updated++;
       }
       PrintFormat("MoveToBreakeven: Updated %d position(s) to breakeven", updated);
       return updated;
@@ -210,14 +195,8 @@ public:
    {
       for(int i = PositionsTotal() - 1; i >= 0; i--)
       {
-         if(m_position.SelectByIndex(i))
-         {
-            if(m_position.Symbol() == m_symbol)
-            {
-               if(targetMagic == 0 || m_position.Magic() == targetMagic)
-                  return true;
-            }
-         }
+         if(m_position.SelectByIndex(i) && IsMatchingPosition(targetMagic))
+            return true;
       }
       return false;
    }
@@ -234,22 +213,16 @@ public:
 
       for(int i = PositionsTotal() - 1; i >= 0; i--)
       {
-         if(m_position.SelectByIndex(i))
-         {
-            if(m_position.Symbol() == m_symbol)
-            {
-               if(targetMagic == 0 || m_position.Magic() == targetMagic)
-               {
-                  if(m_position.PositionType() == POSITION_TYPE_BUY)
-                     buyCount++;
-                  else if(m_position.PositionType() == POSITION_TYPE_SELL)
-                     sellCount++;
+         if(!m_position.SelectByIndex(i) || !IsMatchingPosition(targetMagic))
+            continue;
 
-                  totalLots   += m_position.Volume();
-                  totalProfit += (m_position.Profit() + m_position.Swap());
-               }
-            }
-         }
+         if(m_position.PositionType() == POSITION_TYPE_BUY)
+            buyCount++;
+         else if(m_position.PositionType() == POSITION_TYPE_SELL)
+            sellCount++;
+
+         totalLots   += m_position.Volume();
+         totalProfit += (m_position.Profit() + m_position.Swap());
       }
    }
 };

@@ -91,39 +91,19 @@ public:
       sl = 0.0;
       tp = 0.0;
 
-      if(orderType == ORDER_TYPE_BUY)
+      // Mathematical direction sign (+1.0 for BUY, -1.0 for SELL)
+      double dir = (orderType == ORDER_TYPE_BUY) ? 1.0 : -1.0;
+
+      if(slDistance > 0.0)
       {
-         if(slDistance > 0.0)
-         {
-            double rawSl = openPrice - slDistance;
-            if(MathAbs(openPrice - rawSl) < minAllowed)
-               rawSl = openPrice - minAllowed;
-            sl = NormalizeDouble(rawSl, digits);
-         }
-         if(tpDistance > 0.0)
-         {
-            double rawTp = openPrice + tpDistance;
-            if(MathAbs(rawTp - openPrice) < minAllowed)
-               rawTp = openPrice + minAllowed;
-            tp = NormalizeDouble(rawTp, digits);
-         }
+         double actualSlDist = MathMax(slDistance, minAllowed);
+         sl = NormalizeDouble(openPrice - dir * actualSlDist, digits);
       }
-      else if(orderType == ORDER_TYPE_SELL)
+
+      if(tpDistance > 0.0)
       {
-         if(slDistance > 0.0)
-         {
-            double rawSl = openPrice + slDistance;
-            if(MathAbs(rawSl - openPrice) < minAllowed)
-               rawSl = openPrice + minAllowed;
-            sl = NormalizeDouble(rawSl, digits);
-         }
-         if(tpDistance > 0.0)
-         {
-            double rawTp = openPrice - tpDistance;
-            if(MathAbs(openPrice - rawTp) < minAllowed)
-               rawTp = openPrice - minAllowed;
-            tp = NormalizeDouble(rawTp, digits);
-         }
+         double actualTpDist = MathMax(tpDistance, minAllowed);
+         tp = NormalizeDouble(openPrice + dir * actualTpDist, digits);
       }
    }
 };
