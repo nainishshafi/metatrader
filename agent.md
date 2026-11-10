@@ -1,4 +1,4 @@
-﻿# Agent Guidelines: MQL4 to MQL5 Migration & Development
+# Agent Guidelines: MQL4 to MQL5 Migration & Development
 
 ## 1. Project Overview & Repository Structure
 This repository contains MetaTrader 4 (MT4) legacy indicators and Expert Advisors (EAs) and their modernized MetaTrader 5 (MT5 / MQL5) counterparts.

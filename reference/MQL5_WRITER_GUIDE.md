@@ -446,11 +446,20 @@ public:
 
 class CPositionManager
 {
-private:
+protected:
    CTrade         m_trade;
    CPositionInfo  m_position;
    string         m_symbol;
    ulong          m_magic;
+
+   //+---------------------------------------------------------------+
+   //| Fast Guard: Match Symbol & Magic Number Isolation             |
+   //+---------------------------------------------------------------+
+   bool IsMatchingPosition(const ulong targetMagic = 0) const
+   {
+      return (m_position.Symbol() == m_symbol &&
+             (targetMagic == 0 || m_position.Magic() == targetMagic));
+   }
 
 public:
    CPositionManager() : m_symbol(""), m_magic(0) {}
@@ -474,34 +483,27 @@ public:
       return true;
    }
 
-   // Always iterate backwards
-   int CloseAllPositions()
+   // Always iterate backwards with linear guard clauses (Zero Arrow Pattern)
+   int CloseAllPositions(const ulong targetMagic = 0)
    {
       int closed = 0;
       for(int i = PositionsTotal() - 1; i >= 0; i--)
       {
-         if(m_position.SelectByIndex(i))
-         {
-            // Strict Magic and Symbol Isolation
-            if(m_position.Symbol() == m_symbol && m_position.Magic() == m_magic)
-            {
-               if(m_trade.PositionClose(m_position.Ticket()))
-                  closed++;
-            }
-         }
+         if(!m_position.SelectByIndex(i) || !IsMatchingPosition(targetMagic))
+            continue;
+
+         if(m_trade.PositionClose(m_position.Ticket()))
+            closed++;
       }
       return closed;
    }
 
-   bool HasOpenPosition()
+   bool HasOpenPosition(const ulong targetMagic = 0)
    {
       for(int i = PositionsTotal() - 1; i >= 0; i--)
       {
-         if(m_position.SelectByIndex(i))
-         {
-            if(m_position.Symbol() == m_symbol && m_position.Magic() == m_magic)
-               return true;
-         }
+         if(m_position.SelectByIndex(i) && IsMatchingPosition(targetMagic))
+            return true;
       }
       return false;
    }

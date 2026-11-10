@@ -1,4 +1,4 @@
-﻿# MQL5 Code & Architecture Reviewer / Checker Manual
+# MQL5 Code & Architecture Reviewer / Checker Manual
 
 > **Target Audience:** Lead Quantitative Developers, Code Reviewers, Trading System Auditors, and QA Engineers.  
 > **Core Objective:** Provide a comprehensive inspection standard, pre-deployment pass/fail audit checklist, and detection rubric for bugs, performance bottlenecks, and over-engineering in MQL5 trading systems.
