@@ -78,11 +78,12 @@ void CloseAllPositions(const ulong targetMagic)
 {
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
-      if(m_position.SelectByIndex(i))
-      {
-         if(m_position.Symbol() == _Symbol && m_position.Magic() == targetMagic)
-            m_trade.PositionClose(m_position.Ticket());
-      }
+      if(!m_position.SelectByIndex(i))
+         continue;
+      if(m_position.Symbol() != _Symbol || m_position.Magic() != targetMagic)
+         continue;
+
+      m_trade.PositionClose(m_position.Ticket());
    }
 }
 ```

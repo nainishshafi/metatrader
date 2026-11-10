@@ -192,4 +192,9 @@ This document captures the technical lessons, architectural pitfalls, debugging 
 * **Result:** Editing source files only in the repository directory will leave the active terminal running old, buggy `.ex5` binaries.
 * **Rule:** Always copy updated `.mq5` files to the terminal directory, invoke `metaeditor64.exe` to compile them to `.ex5`, and verify the compilation exit code (`0 errors, 0 warnings`).
 
+### 9. DO NOT Write Deeply Nested "Arrow Anti-Pattern" (Pyramid of Doom) Code
+* **Why:** Deeply nesting multiple `if` statements inside position loops or trading event handlers (e.g. `if(select) { if(symbol) { if(magic) { if(condition) { ... } } } }`) obscures edge cases, increases cyclomatic complexity, and makes code unmaintainable.
+* **Result:** Subtle logical bugs, difficult code reviews, and missed trade handling logic.
+* **Rule:** Invert conditions into linear guard clauses (`if(!select) continue; if(!symbol) continue;`). Use `switch` statements for enums, and use mathematical direction multipliers (`dir = (type == BUY) ? 1.0 : -1.0`) to avoid duplicate Buy/Sell branches. Max nesting depth must remain $\le 2$.
+
 

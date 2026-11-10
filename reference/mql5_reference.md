@@ -347,10 +347,16 @@ void OnTick()
       trade.Buy(0.10, _Symbol, ask, ask - 100 * _Point, ask + 200 * _Point, "Buy Order");
    }
 
-   // Close Position
+   // Close Position (Safe backward iteration with Magic Number isolation & linear guards)
    if(CloseSignal())
    {
-      trade.PositionClose(_Symbol);
+      CPositionInfo pos;
+      for(int i = PositionsTotal() - 1; i >= 0; i--)
+      {
+         if(!pos.SelectByIndex(i)) continue;
+         if(pos.Symbol() != _Symbol || pos.Magic() != 123456) continue;
+         trade.PositionClose(pos.Ticket());
+      }
    }
 }
 ```
