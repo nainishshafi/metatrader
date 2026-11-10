@@ -24,14 +24,6 @@
 #define LBL_SL         "EA_Lbl_SL"
 #define LBL_STATUS     "EA_Lbl_Status"
 
-//--- Trade Signal Enumeration
-enum ENUM_AUTOTRADE_SIGNAL
-{
-   AUTOTRADE_SIGNAL_NONE = 0,
-   AUTOTRADE_SIGNAL_BUY  = 1,
-   AUTOTRADE_SIGNAL_SELL = -1
-};
-
 //--- System Configuration Structure
 struct SAutoTradeConfig
 {

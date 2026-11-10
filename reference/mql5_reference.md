@@ -1,4 +1,4 @@
-﻿# MQL5 Complete Reference & MQL4-to-MQL5 Migration Manual
+# MQL5 Complete Reference & MQL4-to-MQL5 Migration Manual
 
 This document provides a comprehensive guide for writing, converting, and testing MQL5 code, with detailed mappings from legacy MQL4.
 

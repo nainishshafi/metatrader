@@ -104,10 +104,7 @@ public:
          return false;
 
       double price_arr[];
-      ArraySetAsSeries(price_arr, true);
-
-      ResetLastError();
-      int copied_price = CopyBuffer(m_indicator.Handle(), 0, 0, 2, price_arr);
+      int copied_price = m_indicator.Copy(0, 0, 2, price_arr);
       if(copied_price < 2 || price_arr[0] == EMPTY_VALUE || price_arr[0] <= 0.0)
          return false;
 
@@ -115,35 +112,25 @@ public:
       m_lastPrice = price;
 
       // 1. Try reading Buffer 4 (TrendBuffer: +1.0 = Uptrend, -1.0 = Downtrend)
-      double trend_arr[];
-      ArraySetAsSeries(trend_arr, true);
-      int copied_trend = CopyBuffer(m_indicator.Handle(), 4, 0, 1, trend_arr);
-      if(copied_trend > 0 && trend_arr[0] != EMPTY_VALUE && trend_arr[0] != 0.0)
+      double t = m_indicator.GetValue(4, 0);
+      if(t != EMPTY_VALUE && t != 0.0)
       {
-         trend       = trend_arr[0];
+         trend       = t;
          m_lastTrend = trend;
          return true;
       }
 
       // 2. Try reading Buffer 1 (ColorBuffer: 0.0 = Uptrend, 1.0 = Downtrend)
-      double color_arr[];
-      ArraySetAsSeries(color_arr, true);
-      int copied_color = CopyBuffer(m_indicator.Handle(), 1, 0, 1, color_arr);
-      if(copied_color > 0 && color_arr[0] != EMPTY_VALUE)
+      double c = m_indicator.GetValue(1, 0);
+      if(c != EMPTY_VALUE)
       {
-         trend       = (color_arr[0] == 0.0) ? 1.0 : -1.0;
+         trend       = (c == 0.0) ? 1.0 : -1.0;
          m_lastTrend = trend;
          return true;
       }
 
       // 3. Fallback: Mathematical Slope of HMA Line (price[0] vs price[1])
-      if(price_arr[0] > price_arr[1])
-         trend = 1.0;
-      else if(price_arr[0] < price_arr[1])
-         trend = -1.0;
-      else
-         trend = 0.0;
-
+      trend       = (price_arr[0] > price_arr[1]) ? 1.0 : ((price_arr[0] < price_arr[1]) ? -1.0 : 0.0);
       m_lastTrend = trend;
       return true;
    }
