@@ -118,6 +118,10 @@ Trading systems process rapid tick spikes (up to 200 ticks/sec during volatility
 * Maximum 1 level of inheritance (`CHMASignal : public ISignal`).
 * Flat composition through a top-level facade (`CTradingSystem`).
 
+### 8. Repository Hygiene & Pre-Commit Protection
+* **No Hardcoded Absolute Paths:** Never commit local machine paths (e.g. `C:\<UserDirectory>\...`). Always use relative repository paths or dynamic `$PSScriptRoot`.
+* **Automated Pre-Commit Guard:** Enforced via local `.git/hooks/pre-commit` to block any commits containing sensitive local machine paths or usernames.
+
 ---
 
 ## 🚀 Installation & Setup

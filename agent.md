@@ -108,6 +108,16 @@ Ensure the log ends with:
 
 Always delete temporary `compile.log` files after verifying.
 
+### 4.1 Mandatory Pre-Commit Path & Quality Gate
+Before creating any commit, you **MUST** run the pre-commit audit to ensure no local machine absolute paths or personal identifiers are committed:
+1. **Never use absolute local paths** (e.g. `C:\<UserDirectory>\...`). Always use relative paths (`mt5\indicators\...`) or dynamic path resolution (`$PSScriptRoot`).
+2. **Automated Pre-Commit Check**:
+   ```powershell
+   git diff --cached | Select-String -Pattern "Users[\\/][a-zA-Z0-9_]+|file:///[Cc]:/Users"
+   ```
+   Must return **0 matches** before proceeding with `git commit`.
+3. A local pre-commit hook is installed at `.git/hooks/pre-commit` to reject any commits containing user paths or personal directories.
+
 ---
 
 ## 5. Detailed Reference
