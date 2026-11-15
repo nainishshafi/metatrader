@@ -43,7 +43,8 @@ Do **not** dump raw MCP numbers (`trend = +1.0`, `61.8%: 3882.23`) without inter
 2. **Fib + Channel Breakout + Decision Band Confluence:**
    - Identify the `AutoFibAutoTrend` swing direction (`anchor_1 = 0.0%` → `anchor_0 = 100.0%` in MT5 `OBJ_FIBO`) and flag exact price overlaps between Fib retracements/extensions (`23.6%`, `38.2%`, `50.0%`, `61.8%`, `78.6%`, `100.0%`, `161.8%`), classic `S1–S3`/`R1–R3` pivots, and Dominion Markets' decision band.
    - If `autofib.channel_present` is `true` (or a chart screenshot is provided), explicitly check whether price is **inside the `AutoFibAutoTrend` channel** or **breaking out** above/below its trendline. On a bullish channel breakout (pushing above `38.2%`), map the primary continuation targets as **`61.8%` (expected initial resistance)** and **`100.0%`**, followed by **`161.8%`** on extension (and vice versa for a bearish channel breakdown), alongside failed-breakout invalidation.
-3. **Structured Report & Scenarios:**
+3. **Structured Report & Scenarios (Always Generate a Fresh Timestamped File):**
+   - Save every skill run as a **fresh timestamped report** under `reports/YYYY-MM-DD_HHMM_xauusd_report.md` (do not overwrite prior reports).
    - **Top-of-Report BUY vs. SELL Probability, Reachable Levels Table & Breakdown:** Always place a BUY vs. SELL probability table (Intraday `M15`–`H1` and Swing `H4`–`D1`), a **Levels Gold Can Reach** table (upside BUY targets `61.8%`, `100.0%`, `161.8%` and downside SELL targets), and a **Probability Breakdown** explaining the technical/H4/daily/macro/sentiment weights at the very top of the report.
    - **Executive Bias & Trend Probability:** Clear Buy vs. Sell conviction grounded in technicals, macro, and positioning.
    - **Intraday Levels Table:** `S3–S1, P, R1–R3`, Fib confluence, and Dominion Markets decision band.
