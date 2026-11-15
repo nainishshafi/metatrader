@@ -12,7 +12,7 @@ Use this skill whenever the user asks for a comprehensive **Gold (`XAU/USD`) mar
 ## Workflow
 
 ### Step 1 — Gather Live MT5 Spot & Custom Indicators (via MCP)
-Call `get_xauusd_snapshot(symbol="XAUUSD.p", timeframe="M15")` exposed by [`code/mcp_server.py`](code/mcp_server.py), which reads the live JSON exported by [`code/XauusdBridgeEA.mq5`](code/XauusdBridgeEA.mq5):
+Call `get_market_snapshot(symbol="<SYMBOL>", timeframe="<TF>")` (e.g. `"XAUUSD.p"` `"M15"` or `"SPXUSD.p"` `"H1"`; `get_xauusd_snapshot` is kept as an alias) exposed by [`code/mcp_server.py`](code/mcp_server.py), which reads the live JSON exported by [`code/XauusdBridgeEA.mq5`](code/XauusdBridgeEA.mq5):
 
 - Live `bid` / `ask`
 - **`HMA nrp`** (`value`, `prev_value`, `trend` `+1`/`-1`, `candles_in_trend`, and `flip_candle`: `bars_ago`, `time`, `hma_value`, OHLC)

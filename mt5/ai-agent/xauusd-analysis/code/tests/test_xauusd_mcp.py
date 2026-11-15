@@ -85,7 +85,7 @@ def test_get_xauusd_snapshot_preserves_h4_candle_fields(tmp_path: Path) -> None:
     fpath = tmp_path / "xauusd_bridge_XAUUSD.p_M15.json"
     fpath.write_text(json.dumps(sample), encoding="utf-8")
 
-    res = mcp_server.get_xauusd_snapshot("XAUUSD.p", "M15", file_path=str(fpath))
+    res = mcp_server.get_market_snapshot("SPXUSD.p", "H1", file_path=str(fpath))
     assert res["ok"] is True
     hma = res["data"]["hma"]
     assert hma["candles_in_trend"] == 1

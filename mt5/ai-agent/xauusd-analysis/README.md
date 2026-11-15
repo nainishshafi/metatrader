@@ -6,7 +6,7 @@ Combines live MetaTrader 5 spot & three custom MQL5 indicators ([`HMA nrp.mq5`](
 
 ## What the Skill Does ([`SKILL.md`](SKILL.md))
 
-1. **Reads Live MT5 Spot & All 3 Indicators (via MCP `get_xauusd_snapshot`):**
+1. **Reads Live MT5 Spot & All 3 Indicators (via MCP `get_market_snapshot`):**
    - **`HMA nrp` (Period 21):** Current/previous HMA values, trend direction (`+1.0` / `-1.0`), `candles_in_trend`, and the exact **`flip_candle`** (`bars_ago`, `time`, `hma_value`, OHLC).
    - **`AutoFibAutoTrend`:** Active swing anchors (`0.0%` → `100.0%`), Fib levels (`0.0%`, `23.6%`, `38.2%`, `50.0%`, `61.8%`, `78.6%`, `100.0%`, `161.8%`), and `channel_present` breakout state.
    - **`H4 CustomCandle`:** Last completed 4-hour candle (`last_h4` OHLC & **last 4hr close**), current 4-hour candle (`current_h4` OHLC), and liquidity-sweep reversal flags (`took_prev_low`, `going_up`, `bullish_sweep_reversal`, `took_prev_high`, `going_down`, `bearish_sweep_reversal`).

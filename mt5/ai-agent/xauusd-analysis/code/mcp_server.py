@@ -33,12 +33,12 @@ def _find_bridge_file(symbol: str, timeframe: str) -> Path | None:
 
 
 @mcp.tool()
-def get_xauusd_snapshot(
+def get_market_snapshot(
     symbol: str = DEFAULT_SYMBOL,
     timeframe: str = "M15",
     file_path: str = "",
 ) -> dict[str, Any]:
-    """Read the XAU/USD snapshot (spot, HMA nrp, AutoFibAutoTrend, H4 CustomCandle) from XauusdBridgeEA.mq5."""
+    """Read the MT5 snapshot (spot, HMA nrp, AutoFibAutoTrend, H4 CustomCandle) for any symbol from XauusdBridgeEA.mq5."""
     clean_symbol = symbol.strip()
     if not clean_symbol:
         raise ValueError("symbol must be a non-empty string")
@@ -62,18 +62,34 @@ def get_xauusd_snapshot(
     return {"ok": True, "file": str(target), "data": data}
 
 
+@mcp.tool()
+def get_xauusd_snapshot(
+    symbol: str = DEFAULT_SYMBOL,
+    timeframe: str = "M15",
+    file_path: str = "",
+) -> dict[str, Any]:
+    """Backward-compatible alias for get_market_snapshot."""
+    return get_market_snapshot(symbol=symbol, timeframe=timeframe, file_path=file_path)
+
+
+@mcp.prompt()
+def market_full_analysis_prompt(symbol: str = DEFAULT_SYMBOL, timeframe: str = "M15") -> str:
+    """Prompt template for a full technical, macro, options, and sentiment report for any symbol."""
+    return (
+        f"Produce a comprehensive {symbol} ({timeframe}) analysis report:\n"
+        f"1. Call `get_market_snapshot(symbol=\"{symbol}\", timeframe=\"{timeframe}\")` to read live MT5 spot, HMA nrp (with flip candle), AutoFibAutoTrend, and H4 CustomCandle.\n"
+        "2. Search the web for 50-day/100-day moving averages, S1-S3/R1-R3 intraday levels, and decision bands.\n"
+        "3. Search the web for Fed policy expectations, US 10Y yields, DXY, and upcoming GDP/PCE/CPI/ECI/PMI/central bank catalysts.\n"
+        "4. Search the web for options expiries, call/put OI concentrations, and pin/magnet strikes.\n"
+        "5. Search the web for retail & investor sentiment and client positioning.\n"
+        "6. Present top-of-report BUY/SELL probabilities, a reachable levels table, and a driver breakdown."
+    )
+
+
 @mcp.prompt()
 def xauusd_full_analysis_prompt(symbol: str = DEFAULT_SYMBOL) -> str:
-    """Prompt template for a full XAU/USD technical, macro, COMEX options, and sentiment report."""
-    return (
-        f"Produce a comprehensive Gold ({symbol}) analysis report:\n"
-        "1. Call `get_xauusd_snapshot` to read live MT5 spot, HMA nrp, AutoFibAutoTrend, and H4 CustomCandle (last H4 close and liquidity-sweep reversal status).\n"
-        "2. Search the web for 50-day/100-day moving averages, S1-S3/R1-R3 intraday levels, and Dominion Markets' decision band.\n"
-        "3. Search the web for Fed policy expectations, US 10Y yields, DXY, and upcoming GDP/PCE/CPI/ECI/PMI/central bank catalysts.\n"
-        "4. Search the web for COMEX gold options expiries, call/put OI concentrations, and pin/magnet strikes.\n"
-        "5. Search the web for retail & investor sentiment and client positioning.\n"
-        "6. Present structured tables for trend probability, S1-S3/R1-R3 vs. Dominion Markets decision band, macro catalysts, options OI, and sentiment."
-    )
+    """Backward-compatible alias for market_full_analysis_prompt."""
+    return market_full_analysis_prompt(symbol=symbol, timeframe="M15")
 
 
 if __name__ == "__main__":
