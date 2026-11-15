@@ -6,5 +6,8 @@
 .githooks/
 .venv/
 .env
+__pycache__/
+*.py[cod]
+.pytest_cache/
 reference/MT5_AI_AGENT_INTEGRATION_REFERENCE.md
 
