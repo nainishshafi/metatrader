@@ -8,6 +8,7 @@ This directory contains two standalone ways to connect AI agents and LLMs to Met
 | :--- | :--- | :--- | :--- |
 | `mcp/` | **MCP** (`MCPServer` + `MetaTrader5` Python IPC) | Claude Desktop, Cursor, and MCP-compatible AI clients | [`mcp/README.md`](mcp/README.md) |
 | `zeromq/` | **ZeroMQ** (`zmq_server.py` + `zmq_client.py`) | Low-latency `REQ/REP` commands and `PUB/SUB` tick streaming | [`zeromq/README.md`](zeromq/README.md) |
+| `mql5-bridge/` | **MQL5 EA / Script** (`CopyBuffer` → HTTP/Socket/File) | Custom `.ex5` indicator buffers, chart state, and `OnTick` events | [`mql5-bridge/README.md`](mql5-bridge/README.md) |
 
 ---
 

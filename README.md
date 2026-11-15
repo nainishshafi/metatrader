@@ -58,6 +58,11 @@ mt5/
     ├── BreakOut_PANCA_EAGLE.mq5      <-- Session breakout indicator with non-overlapping boxes
     ├── CustomCandle.mq5              <-- Higher-timeframe candle renderer with name-based cleanup
     └── HMA nrp.mq5                   <-- Multi-timeframe Hull Moving Average (O(1) incremental)
+
+└── ai-agent/                         <-- AI Agent & External Process Integrations (MT5 Only)
+    ├── mcp/                          <-- Standalone MCP server (stdio / streamable-http)
+    ├── zeromq/                       <-- Low-latency ZeroMQ REQ/REP & PUB/SUB bridge
+    └── mql5-bridge/                  <-- MQL5 EA bridge (RsiBridgeEA.mq5 + HTTP/file receiver)
 ```
 
 * **Tier 1 (Generic Framework):** Reusable across *any* future Expert Advisor, indicator, or strategy with zero modifications.
@@ -69,7 +74,7 @@ mt5/
 
 | Indicator | Purpose | Optimization Highlights |
 | :--- | :--- | :--- |
-| **HMA nrp** | Non-repainting Hull Moving Average with multi-timeframe interpolation. | Incremental $O(1)$ calculation via `prev_calculated`, pre-allocated capacity buffers, binary search for HTF bars. |
+| **HMA nrp** | Non-repainting Hull Moving Average with multi-timeframe interpolation. | Incremental $O(1)$ calculation via `prev_calculated`, persistent STF/MTF scratch buffers (zero per-tick allocation churn), binary search for HTF bars. |
 | **CustomCandle** | Renders higher-timeframe candles (e.g. H1 on M15) on lower-timeframe charts. | Skip-drawing closed historical bars, name-based deterministic cleanup, and unselectable background z-order. |
 | **AutoFibAutoTrend** | Automatic Fibonacci Retracement, Fibonacci Fan, and Equidistant Trend Channel. | Removed `input group` parameter shift bug, added `BarsCalculated(h) >= 2` freeze guard, and set unselectable z-order. |
 | **average_speed** | Calculates price movement speed in points/minute. | Cleaned up parameters for seamless `iCustom()` programmatic calls and zero-divide safeguards on point/time. |
@@ -146,6 +151,16 @@ Trading systems process rapid tick spikes (up to 200 ticks/sec during volatility
 
 ---
 
+## 🤖 AI Agent Integrations (`mt5/ai-agent/`)
+
+Connect LLMs, MCP clients, or custom Python agents to a running **MetaTrader 5** Windows desktop terminal (MT5 only; does not support MT4):
+
+* **[MCP Server](mt5/ai-agent/mcp/README.md):** Standalone `MCPServer` exposing account info, ticks, OHLCV bars, open positions, and guarded order execution (`MT5_ALLOW_LIVE_TRADING=false` dry-run by default) over `stdio` or `streamable-http`.
+* **[ZeroMQ Bridge](mt5/ai-agent/zeromq/README.md):** Low-latency `REQ/REP` JSON commands (`tcp://127.0.0.1:5555`) and `PUB/SUB` tick streaming (`tcp://127.0.0.1:5556`).
+* **[MQL5 EA / Indicator Bridge](mt5/ai-agent/mql5-bridge/README.md):** Runs inside MT5 (`RsiBridgeEA.mq5` using `iRSI` + `CopyBuffer` with `BarsCalculated()` guard) to export indicator buffers via `MQL5\Files\` JSON snapshots or local HTTP `WebRequest` to `bridge_server.py`.
+
+---
+
 ## 📚 Reference & Technical Documentation
 
 For in-depth standards, audit rubrics, and technical post-mortems, consult the reference guides in the `reference/` directory:
@@ -154,6 +169,7 @@ For in-depth standards, audit rubrics, and technical post-mortems, consult the r
 * **[MQL5 Code Reviewer & Checker Manual](reference/MQL5_CHECKER_GUIDE.md):** 11-point pre-deployment pass/fail checklist, arrow anti-pattern detection rubric, failure mode audits, and headless automated compilation scripts.
 * **[OOP vs. Procedural & Data-Oriented Performance Guide](reference/MQL5_OOP_VS_PROCEDURAL_PERFORMANCE_GUIDE.md):** In-depth CPU hardware, cache line, and VTable analysis of OOP vs Procedural math in quantitative systems.
 * **[Technical Learnings & Post-Mortem Guide](MQL5_DEVELOPMENT_REFERENCE_AND_LEARNINGS.md):** Detailed technical discoveries from past bugs (46s freeze, input group compiler bug, GDI font thrashing).
+* **[MT5 AI Agent Concepts](reference/MT5_AI_AGENT_CONCEPTS.md):** Architectural overview and comparison of MCP, ZeroMQ, and MQL5 EA bridge patterns.
 
 ---
 

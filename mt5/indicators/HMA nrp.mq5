@@ -129,6 +129,21 @@ double g_stfMaHalf[];
 double g_stfMaFull[];
 double g_stfAtr[];
 
+// Persistent arrays for zero-churn Multi-Timeframe (MTF) calculation
+MqlRates g_mtfRates[];
+double   g_mtfOpen[];
+double   g_mtfHigh[];
+double   g_mtfLow[];
+double   g_mtfClose[];
+double   g_mtfPrice[];
+double   g_mtfHaOpen[];
+double   g_mtfHaClose[];
+double   g_mtfMaHalf[];
+double   g_mtfMaFull[];
+double   g_mtfHma[];
+double   g_mtfTrend[];
+double   g_mtfTem[];
+
 //+------------------------------------------------------------------+
 //| Custom helper: Timeframe to String                               |
 //+------------------------------------------------------------------+
@@ -692,36 +707,32 @@ int OnCalculate(const int rates_total,
    int  barsPerHtf = (int)MathMax(1, targetTfSec / curTfSec);
    int  htfBarsToCopy = MathMin(rates_total, (rates_total / barsPerHtf) + HMAPeriod * 3 + 20);
 
-   MqlRates htfRates[];
-   ArraySetAsSeries(htfRates, false);
-   int copied = CopyRates(_Symbol, targetTf, 0, htfBarsToCopy, htfRates);
+   ArraySetAsSeries(g_mtfRates, false);
+   int copied = CopyRates(_Symbol, targetTf, 0, htfBarsToCopy, g_mtfRates);
    if(copied < 2)
       return prev_calculated;
 
-   double htfOpen[], htfHigh[], htfLow[], htfClose[];
-   ArrayResize(htfOpen,  copied);
-   ArrayResize(htfHigh,  copied);
-   ArrayResize(htfLow,   copied);
-   ArrayResize(htfClose, copied);
+   if(ArraySize(g_mtfOpen)  < copied) ArrayResize(g_mtfOpen,  copied, 1024);
+   if(ArraySize(g_mtfHigh)  < copied) ArrayResize(g_mtfHigh,  copied, 1024);
+   if(ArraySize(g_mtfLow)   < copied) ArrayResize(g_mtfLow,   copied, 1024);
+   if(ArraySize(g_mtfClose) < copied) ArrayResize(g_mtfClose, copied, 1024);
 
    for(int k = 0; k < copied; k++)
    {
-      htfOpen[k]  = htfRates[k].open;
-      htfHigh[k]  = htfRates[k].high;
-      htfLow[k]   = htfRates[k].low;
-      htfClose[k] = htfRates[k].close;
+      g_mtfOpen[k]  = g_mtfRates[k].open;
+      g_mtfHigh[k]  = g_mtfRates[k].high;
+      g_mtfLow[k]   = g_mtfRates[k].low;
+      g_mtfClose[k] = g_mtfRates[k].close;
    }
 
-   double htfPrice[], htfHaOpen[], htfHaClose[], htfMaHalf[], htfMaFull[];
-   double htfHma[], htfTrend[], htfTem[];
-   ArrayResize(htfHma,   copied);
-   ArrayResize(htfTrend, copied);
-   ArrayResize(htfTem,   copied);
+   if(ArraySize(g_mtfHma)   < copied) ArrayResize(g_mtfHma,   copied, 1024);
+   if(ArraySize(g_mtfTrend) < copied) ArrayResize(g_mtfTrend, copied, 1024);
+   if(ArraySize(g_mtfTem)   < copied) ArrayResize(g_mtfTem,   copied, 1024);
 
-   CalculateHmaSeriesIncremental(htfOpen, htfHigh, htfLow, htfClose, copied, 0,
+   CalculateHmaSeriesIncremental(g_mtfOpen, g_mtfHigh, g_mtfLow, g_mtfClose, copied, 0,
                                  HMAPeriod, HMASpeed, HMAPrice, HMAMethod,
-                                 htfPrice, htfHaOpen, htfHaClose, htfMaHalf, htfMaFull,
-                                 htfHma, htfTrend, htfTem);
+                                 g_mtfPrice, g_mtfHaOpen, g_mtfHaClose, g_mtfMaHalf, g_mtfMaFull,
+                                 g_mtfHma, g_mtfTrend, g_mtfTem);
 
    int start = (prev_calculated > 2 && prev_calculated <= rates_total)
                ? MathMax(0, prev_calculated - barsPerHtf * 2 - 2)
@@ -734,7 +745,7 @@ int OnCalculate(const int rates_total,
       ArrowUpBuffer[i] = EMPTY_VALUE;
       ArrowDnBuffer[i] = EMPTY_VALUE;
 
-      int k = FindHtfBar(time[i], htfRates, copied);
+      int k = FindHtfBar(time[i], g_mtfRates, copied);
       if(k < 0)
       {
          HmaBuffer[i]      = EMPTY_VALUE;
@@ -744,18 +755,18 @@ int OnCalculate(const int rates_total,
          continue;
       }
 
-      TrendBuffer[i]    = htfTrend[k];
-      HmaColorBuffer[i] = (htfTrend[k] == 1.0) ? 0.0 : 1.0;
-      TemBuffer[i]      = htfTem[k];
+      TrendBuffer[i]    = g_mtfTrend[k];
+      HmaColorBuffer[i] = (g_mtfTrend[k] == 1.0) ? 0.0 : 1.0;
+      TemBuffer[i]      = g_mtfTem[k];
 
       if(!Interpolate || k == 0)
       {
-         HmaBuffer[i] = htfHma[k];
+         HmaBuffer[i] = g_mtfHma[k];
       }
       else
       {
-         datetime htfBarTime  = htfRates[k].time;
-         datetime nextHtfTime = (k < copied - 1) ? htfRates[k + 1].time : (htfBarTime + (datetime)targetTfSec);
+         datetime htfBarTime  = g_mtfRates[k].time;
+         datetime nextHtfTime = (k < copied - 1) ? g_mtfRates[k + 1].time : (htfBarTime + (datetime)targetTfSec);
          double duration = (double)(nextHtfTime - htfBarTime);
          if(duration <= 0.0) duration = (double)targetTfSec;
 
@@ -764,30 +775,30 @@ int OnCalculate(const int rates_total,
          if(frac < 0.0) frac = 0.0;
          if(frac > 1.0) frac = 1.0;
 
-         HmaBuffer[i] = htfHma[k - 1] + (htfHma[k] - htfHma[k - 1]) * frac;
+         HmaBuffer[i] = g_mtfHma[k - 1] + (g_mtfHma[k] - g_mtfHma[k - 1]) * frac;
       }
 
       // Check for trend change arrows
-      bool trendChanged = (k > 0 && htfTrend[k] != htfTrend[k - 1]);
+      bool trendChanged = (k > 0 && g_mtfTrend[k] != g_mtfTrend[k - 1]);
       if(trendChanged)
       {
          bool shouldPlace = false;
          if(ArrowOnFirst)
          {
-            int prevK = (i > 0) ? FindHtfBar(time[i - 1], htfRates, copied) : -1;
+            int prevK = (i > 0) ? FindHtfBar(time[i - 1], g_mtfRates, copied) : -1;
             shouldPlace = (prevK != k);
          }
          else
          {
-            int nextK = (i < rates_total - 1) ? FindHtfBar(time[i + 1], htfRates, copied) : -1;
+            int nextK = (i < rates_total - 1) ? FindHtfBar(time[i + 1], g_mtfRates, copied) : -1;
             shouldPlace = (nextK != k);
          }
 
          if(shouldPlace)
          {
-            if(htfTrend[k] == 1.0)
+            if(g_mtfTrend[k] == 1.0)
                ArrowUpBuffer[i] = MathMin(HmaBuffer[i], low[i])  - g_stfAtr[i] * UpArrowGap;
-            else if(htfTrend[k] == -1.0)
+            else if(g_mtfTrend[k] == -1.0)
                ArrowDnBuffer[i] = MathMax(HmaBuffer[i], high[i]) + g_stfAtr[i] * DnArrowGap;
          }
       }
