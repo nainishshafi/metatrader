@@ -4,4 +4,7 @@
 .vscode/
 *.code-workspace
 .githooks/
+.venv/
+.env
+reference/MT5_AI_AGENT_INTEGRATION_REFERENCE.md
 
