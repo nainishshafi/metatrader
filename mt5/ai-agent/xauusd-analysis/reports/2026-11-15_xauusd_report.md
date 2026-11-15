@@ -1,0 +1,129 @@
+# XAU/USD (Gold) Comprehensive Market Analysis Report
+**Date:** 2026-11-15 | **Symbol:** `XAUUSD.p` (Spot / `M15` + `H4` + Daily) | **Live Spot:** `Bid 3,882.00` / `Ask 3,882.15`
+
+---
+
+## 0. BUY vs. SELL Probability, Reachable Levels & Breakdown
+
+### BUY vs. SELL Probability Assessment
+| Horizon | BUY Probability | SELL Probability | Primary Driver |
+| :--- | :---: | :---: | :--- |
+| **Intraday Scalp (`M15`–`H1`)** | **55%** | **45%** | `M15` `HMA nrp` just flipped bullish (`+1.0`, bar `0`, `3,874.19`) + `AutoFibAutoTrend` channel breakout attempt, testing `38.2%` (`3,882.23`) |
+| **Swing / Multi-Day (`H4`–`D1`)** | **35%** | **65%** | Price remains below `50D MA` (`3,917–3,924`) & `100D MA` (`3,964–3,996`), `H4` is still red (`going_down = true`, no low sweep), `10Y > 5.15%`, `DXY ~103.40–103.50`, `87–90%` Dec hike odds, crowded retail longs |
+
+### Levels Gold Can Reach (Upside vs. Downside Targets)
+| Direction | Target Level | Price (`XAUUSD.p`) | Confluence & Condition to Reach |
+| :--- | :--- | :---: | :--- |
+| **BUY Target 1** | `H4` Reclaim / `50.0%` Fib | **`3,885.43 – 3,886.76`** | Reclaiming `last_h4` close (`3,885.43`) / current `H4` open (`3,885.42`) + `50.0%` Fib (`3,886.76`) after clearing `38.2%` (`3,882.23`) |
+| **BUY Target 2** | `61.8%` Fib / Daily `R3` | **`3,890.02 – 3,891.30`** | Golden-ratio resistance (`61.8%` = `3,891.30`) + daily `R3` (`~3,890.02`); high-probability initial stall/rejection zone |
+| **BUY Target 3** | `78.6%` Fib / `last_h4` High | **`3,897.75 – 3,899.82`** | Upper `H4` liquidity pool (`last_h4.high = 3,899.82`); would trigger `H4` high sweep if reached |
+| **BUY Target 4** | `100.0%` Fib (`anchor_0`) | **`3,905.97`** | Full `M15` swing retracement if `61.8%` breaks cleanly |
+| **BUY Target 5 (Extended)** | `50D MA` → `161.8%` Fib | **`3,917.00 – 3,929.71`** | `50D MA` (`3,917–3,924`) caps trend; only a daily close above `50D MA` opens `161.8%` (`3,929.71`) |
+| **SELL Target 1** | Daily `P` / `23.6%` / `HMA nrp` | **`3,876.62 → 3,874.19`** | Failure at `38.2%` (`3,882.23`) pulls back to `23.6%` (`3,876.62`) and `M15` `HMA nrp` (`3,874.19`) / daily `S1` (`~3,873.14`) |
+| **SELL Target 2** | Current `H4` Low | **`3,869.52`** | Retest of current `H4` session low if `HMA nrp` (`3,874.19`) flips back to `-1.0` |
+| **SELL Target 3** | `0.0%` Fib / `last_h4` Low / `S2` | **`3,867.56`** | `AutoFib` `0.0%` (`3,867.56`) + `last_h4.low` (`3,867.56`) + daily `S2` (`~3,868.00`); **key liquidity sweep zone** |
+| **SELL Target 4 (Extended)** | Daily `S3` → Psychological Floor | **`3,864.70 → 3,850.00`** | Clean breakdown below `3,867.56` without immediate reclaim triggers retail long-stop cascade toward `$3,850` |
+
+### Probability Breakdown (Why These Weights)
+1. **Intraday Technicals (`+20%` Bullish Lift on `M15`):** `HMA nrp` (21) flipped bullish (`+1.0` from `-1.0`) on bar `0` (`3,874.19`), spot (`3,882.00`) is above HMA, and price is pushing out of the `AutoFibAutoTrend` downward channel. This gives buyers a slight short-term edge (`55%`) *only* if `3,882.23` (`38.2%`) and `3,885.43` (`last_h4` close) convert into support.
+2. **`H4` Structure (`Neutral / Slight Bearish Lean`):** The current `H4` candle (`3,869.52–3,888.06`, close `3,882.00`) is still red (`going_down = true` vs. `3,885.42` open) and has **not** swept `last_h4.low` (`3,867.56`) yet (`bullish_sweep_reversal = false`). Without an `H4` sweep-and-reclaim or close above `3,885.43`, upside rallies remain vulnerable to fading.
+3. **Daily Trend (`-15%` Bearish Drag):** Both `50D MA` (`3,917–3,924`) and `100D MA` (`3,964–3,996`) slope overhead, classifying the broader technical picture as a counter-trend bounce inside a downtrend.
+4. **Macro & Positioning (`-15%` Bearish Drag):** With CME FedWatch pricing `~87–90%` odds of a `25 bps` December hike, `US 10Y > 5.15%`, `DXY ~103.40–103.50`, and retail positioning skewed net-long (IG/Myfxbook dip-buying), upside spikes into `3,891.30` (`61.8%`) or `3,905.97` (`100.0%`) face heavy macro and profit-taking supply unless yields/DXY cool.
+
+---
+
+## 1. Executive Bias & Trend Probability
+
+| Horizon / Lens | Signal / State | Bias |
+| :--- | :--- | :--- |
+| **Intraday (`M15` `HMA nrp` 21)** | `3,874.19` (prev `3,873.94`), flipped **`+1.0`** from `-1.0` on **bar `0`** (`candles_in_trend = 1`) | **Bullish Flip (Counter-Trend Bounce)** |
+| **Intraday (`M15` `AutoFibAutoTrend`)** | Swing `3,867.56` (`0.0%`) → `3,905.97` (`100.0%`), `channel_present = true`, spot at `38.2%` (`3,882.23`) | **Testing 38.2% Resistance / Channel Breakout Attempt** |
+| **4-Hour (`H4` `CustomCandle`)** | Last `H4` close: **`3,885.43`** (range `3,867.56–3,899.82`); current `H4` (`3,869.52–3,888.06`, close `3,882.00`) is an **inside bar** (`took_prev_low = false`, `took_prev_high = false`, `going_down = true`) | **Neutral / Inside Bar (No Sweep Yet)** |
+| **Higher Timeframe (`50D` / `100D` MA)** | `50D MA` `3,917–3,924`, `100D MA` `3,964–3,996` — spot is below both | **Bearish (Strong Sell on Daily MAs)** |
+| **Macro & Sentiment** | Hawkish Fed (`87–90%` 25 bps hike odds), `US 10Y > 5.15%`, `DXY ~103.40–103.50`, crowded retail longs | **Macro Headwind / Contrarian Long Risk** |
+
+- **Overall Synthesis:** The `M15` `HMA nrp` bullish flip (`+1.0` on bar `0`, `3,874.19`) and push out of the downward `AutoFibAutoTrend` channel is a **counter-trend intraday bounce** against a bearish daily structure (`50D MA` at `3,917–3,924`, `100D MA` at `3,964–3,996`) and hawkish macro headwinds (`10Y > 5.15%`, `DXY ~103.40–103.50`). On `H4`, the current candle (`open 3,885.42`, `low 3,869.52`, `close 3,882.00`) has **not** swept the prior `H4` low (`3,867.56`) or high (`3,899.82`), and remains slightly below its `3,885.42` open (`going_down = true`).
+
+---
+
+## 2. Live MT5 Indicators (`get_xauusd_snapshot("XAUUSD.p", "M15")`)
+
+### `HMA nrp` (Period 21) & Flip Candle
+- **Current / Previous Value:** `3,874.19` / `3,873.94` (spot `3,882.00` is `+7.81` above HMA)
+- **Trend:** `+1.0` (flipped bullish from `-1.0`)
+- **Candles in Current Trend:** **`1`** (`flip_candle.bars_ago = 0`)
+- **Flip Candle (`M15` bar `0`):** Open `3,877.26` | High `3,882.41` | Low `3,875.55` | Close `3,882.00` | HMA `3,874.19`
+
+### `H4` `CustomCandle` Analysis
+| Candle | Open | High | Low | Close |
+| :--- | :---: | :---: | :---: | :---: |
+| **Last Completed `H4` (`last_h4`)** | `3,881.21` | `3,899.82` | `3,867.56` | **`3,885.43`** |
+| **Current `H4` (`current_h4`)** | `3,885.42` | `3,888.06` | `3,869.52` | `3,882.00` |
+
+- **Last 4hr Close:** **`3,885.43`**
+- **Sweep & Reversal Flags:**
+  - `took_prev_low`: `false` (`3,869.52` held above `3,867.56`) | `going_up`: `false` | `bullish_sweep_reversal`: `false`
+  - `took_prev_high`: `false` (`3,888.06` held below `3,899.82`) | `going_down`: `true` | `bearish_sweep_reversal`: `false`
+- **Interpretation:** Neither liquidity extreme of the prior `H4` candle (`3,867.56` low or `3,899.82` high) has been swept yet. Reclaiming `3,885.43` (last `H4` close / current `H4` open `3,885.42`) would flip the current `H4` candle green in alignment with the `M15` `HMA nrp` flip.
+
+### `AutoFibAutoTrend` Levels & Confluence (`channel_present = true`)
+- **MT5 `OBJ_FIBO` Anchors:** `0.0%` (`anchor_1`) = `3,867.56` → `100.0%` (`anchor_0`) = `3,905.97`
+
+| Level / Marker | Price (`XAUUSD.p`) | Technical Confluence |
+| :--- | :---: | :--- |
+| **`161.8%` Extension** | **`3,929.71`** | Extended breakout target above `50D MA` (`3,917–3,924`) |
+| **`100.0%` (`anchor_0`)** | **`3,905.97`** | Full swing retracement target |
+| **`78.6%`** | `3,897.75` | Near `last_h4` high (`3,899.82`) & `100D MA` lower band (`3,964` higher up) |
+| **`61.8%`** | **`3,891.30`** | Key golden-ratio resistance; just above daily `R3` (`~3,890.02`) |
+| **`50.0%`** | `3,886.76` | Just above `last_h4` close (`3,885.43`) / current `H4` open (`3,885.42`) |
+| **`38.2%`** | **`3,882.23`** | **Spot (`3,882.00`) is testing this level**; aligns with daily `R1` (`~3,881.58`) |
+| **`23.6%`** | `3,876.62` | Near daily Pivot `P` (`~3,876.44`) & `HMA nrp` (`3,874.19`) |
+| **`0.0%` (`anchor_1`)** | **`3,867.56`** | Swing low, `last_h4` low (`3,867.56`), and daily `S2` (`~3,868.00`) |
+
+---
+
+## 3. Intraday Pivots & Higher-Timeframe Moving Averages
+
+| Benchmark | Level (`USD/oz`) | Role Relative to Spot (`3,882.00`) |
+| :--- | :---: | :--- |
+| **100-Day MA** | `3,964 – 3,996` | Major medium-term overhead resistance |
+| **50-Day MA** | `3,917 – 3,924` | Primary trend resistance; reclaim needed to neutralize daily downtrend |
+| **Daily R3** | `~3,890.02` | Overhead resistance (confluent with `61.8%` Fib `3,891.30`) |
+| **Daily R1** | `~3,881.58` | Immediate intraday pivot resistance (confluent with `38.2%` Fib `3,882.23`) |
+| **Daily Pivot (P)** | `~3,876.44 – 3,890.00` | Intraday equilibrium (lower band confluent with `23.6%` Fib `3,876.62`) |
+| **Daily S1** | `~3,873.14` | Immediate support (just below `HMA nrp` `3,874.19`) |
+| **Daily S2 / S3** | `~3,868.00` / `~3,864.70` | Deep support (`S2` aligns with `0.0%` Fib & `last_h4` low `3,867.56`) |
+
+---
+
+## 4. Macroeconomic Drivers & Catalysts
+
+| Driver | Current Reading / Consensus | Transmission Effect on Gold |
+| :--- | :--- | :--- |
+| **Fed Expectations (CME FedWatch)** | `~87–90%` odds of a `25 bps` hike at December FOMC; `~10–15%` odds of `50 bps` | **Bearish:** Higher policy-rate path raises real carry cost of non-yielding bullion |
+| **US 10-Year Treasury Yield** | Surged past **`5.15%`** | **Bearish:** Elevates opportunity cost of holding gold |
+| **US Dollar Index (`DXY`)** | Near **`103.40 – 103.50`** (~19-month highs) | **Bearish:** Stronger USD weighs on dollar-denominated commodities |
+| **Inflation & Growth (CPI/PPI/PCE/GDP)** | Oct CPI `+0.4% MoM` (beat `0.3%`), annual PPI `6.5%`, Q3 GDP `3.4%`, PCE mid-`3%` | **Bearish / Hawkish Fed:** Sticky inflation + solid growth keeps Fed tightening in play |
+
+---
+
+## 5. COMEX Gold Options & Sentiment Positioning
+
+- **COMEX Gold (`GCZ26` / `OG`) Structure:** Front-month focus centers on December 2026 (`GCZ26`) around the `$3,850–$3,900` zone. Live strike-by-strike Open Interest (exact Call Wall, Put Wall, and Gamma Pin magnets) requires CME Direct / CME Open Interest Profile Tool access and is not statically available via web search.
+- **Retail Sentiment (IG / Myfxbook):** Retail traders are **net-long**, aggressively buying dips below `$3,900` (`$3,850–$3,880`), creating **contrarian long-squeeze risk** if `$3,867.56` breaks.
+- **Global ETF Flows (WGC):** Global gold ETFs added **`$2.7B` in October** (reaching **`~4,275 tonnes`**), led by European and Asian inflows, though Western/North American funds saw mixed-to-negative November flows as yields topped `5%`, leaving higher-cost-basis ETF longs vulnerable on breakdowns.
+
+---
+
+## 6. Actionable Scenarios
+
+1. **Bullish Breakout Continuation (Channel Breakout + Fib Ladder):**
+   - **Trigger:** Sustained `M15` hold above `38.2%` (`3,882.23`) and reclaim of `last_h4` close / `H4` open (`3,885.43`) + `50.0%` (`3,886.76`), keeping `HMA nrp` (`3,874.19`) green (`+1.0`).
+   - **Targets:** **`61.8%` (`3,891.30`)** *(expected first resistance)* → **`100.0%` (`3,905.97`)** → **`161.8%` (`3,929.71`)** if `50D MA` (`3,917–3,924`) clears.
+2. **Bearish Rejection / Liquidity Sweep of `last_h4` Low:**
+   - **Trigger:** Rejection at `38.2%` (`3,882.23`) or `61.8%` (`3,891.30`) followed by `M15` close below `HMA nrp` (`3,874.19`) flipping `HMA` back to `-1.0`.
+   - **Targets:** `23.6%` (`3,876.62`) → `0.0%` / `last_h4` low (`3,867.56`) → daily `S3` (`~3,864.70`) and `$3,850`.
+   - **Watch for `H4` Bullish Sweep Reversal:** If price dips below `3,867.56` (`took_prev_low = true`) and snaps back above `3,867.56` + `3,885.42`, that would trigger a higher-timeframe `H4` sweep reversal.
+3. **Invalidation:**
+   - **Bullish invalidation:** `M15` close below `3,874.19` (`HMA nrp` `-1.0`) and `3,867.56` (`0.0%` Fib / `last_h4` low).
+   - **Bearish invalidation:** Daily close above the `50D MA` (`3,917–3,924`) toward `161.8%` (`3,929.71`).
