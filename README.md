@@ -62,7 +62,8 @@ mt5/
 └── ai-agent/                         <-- AI Agent & External Process Integrations (MT5 Only)
     ├── mcp/                          <-- Standalone MCP server (stdio / streamable-http)
     ├── zeromq/                       <-- Low-latency ZeroMQ REQ/REP & PUB/SUB bridge
-    └── mql5-bridge/                  <-- MQL5 EA bridge (RsiBridgeEA.mq5 + HTTP/file receiver)
+    ├── mql5-bridge/                  <-- MQL5 EA bridge (RsiBridgeEA.mq5 + HTTP/file receiver)
+    └── xauusd-analysis/              <-- XAU/USD (Gold) MCP + XauusdBridgeEA + analysis skill
 ```
 
 * **Tier 1 (Generic Framework):** Reusable across *any* future Expert Advisor, indicator, or strategy with zero modifications.
@@ -155,7 +156,13 @@ Trading systems process rapid tick spikes (up to 200 ticks/sec during volatility
 
 Connect LLMs, MCP clients, or custom Python agents to a running **MetaTrader 5** Windows desktop terminal (MT5 only; does not support MT4):
 
-* **[MCP Server](mt5/ai-agent/mcp/README.md):** Standalone `MCPServer` exposing account info, ticks, OHLCV bars, open positions, and guarded order execution (`MT5_ALLOW_LIVE_TRADING=false` dry-run by default) over `stdio` or `streamable-http`.
+* **[MCP Server](mt5/ai-agent/mcp/README.md):** Standalone `MCPServer` (`mcp_server.py`) over `stdio` or `streamable-http` exposing:
+  * **Resources:** `mt5://account/summary`, `mt5://positions/open`
+  * **Tools:** `get_account_info`, `get_symbol_tick`, `get_rates`, `get_open_positions`, and guarded order execution (`place_market_order`, `close_position` with `MT5_ALLOW_LIVE_TRADING=false` dry-run by default and `MT5_MAX_LOT_SIZE` cap)
+  * **Prompt:** `risk_audit_prompt`
+* **[XAU/USD Analysis MCP & Agent Skill](mt5/ai-agent/xauusd-analysis/README.md):** Combines a live MT5 indicator bridge (`XauusdBridgeEA.mq5`), a dedicated MCP server (`code/mcp_server.py` exposing `get_market_snapshot`, `get_xauusd_snapshot`, and `market_full_analysis_prompt`), and the **[`xauusd-analysis` Agent Skill](mt5/ai-agent/xauusd-analysis/SKILL.md)** to produce timestamped Gold market reports under `mt5/ai-agent/xauusd-analysis/reports/`:
+  * **Live MT5 Technicals:** Reads `HMA nrp` (including exact `flip_candle`), `AutoFibAutoTrend` (`0.0%`–`161.8%` levels & channel breakout state), and `H4 CustomCandle` (OHLC + liquidity-sweep reversal flags).
+  * **Macro, Options & Sentiment Synthesis:** Pairs live MT5 readings with `50D`/`100D` MAs, daily `S1–S3`/`R1–R3` pivots, FedWatch/10Y yields/`DXY` catalysts, COMEX `GC`/`OG` options walls & pin levels, and retail/ETF sentiment to output top-of-report Intraday (`M15`–`H1`) and Swing (`H4`–`D1`) BUY vs. SELL probabilities.
 * **[ZeroMQ Bridge](mt5/ai-agent/zeromq/README.md):** Low-latency `REQ/REP` JSON commands (`tcp://127.0.0.1:5555`) and `PUB/SUB` tick streaming (`tcp://127.0.0.1:5556`).
 * **[MQL5 EA / Indicator Bridge](mt5/ai-agent/mql5-bridge/README.md):** Runs inside MT5 (`RsiBridgeEA.mq5` using `iRSI` + `CopyBuffer` with `BarsCalculated()` guard) to export indicator buffers via `MQL5\Files\` JSON snapshots or local HTTP `WebRequest` to `bridge_server.py`.
 
